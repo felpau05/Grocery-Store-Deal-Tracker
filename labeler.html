@@ -1,0 +1,1448 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>flippwatch — label items</title>
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg: #f7f6f3;
+            --surface: #fff;
+            --surface2: #f1f0ed;
+            --border: rgba(0, 0, 0, 0.1);
+            --border-strong: rgba(0, 0, 0, 0.18);
+            --text: #1a1917;
+            --text-muted: #6b6a67;
+            --text-faint: #a09f9c;
+            --accent: #2563eb;
+            --accent-bg: #eff6ff;
+            --danger: #dc2626;
+            --danger-bg: #fef2f2;
+            --r: 8px;
+            --rl: 12px;
+            --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            --mono: "SF Mono", "Fira Mono", monospace;
+        }
+
+        @media (prefers-color-scheme:dark) {
+            :root {
+                --bg: #18181b;
+                --surface: #1f1f23;
+                --surface2: #27272b;
+                --border: rgba(255, 255, 255, 0.08);
+                --border-strong: rgba(255, 255, 255, 0.14);
+                --text: #f0efe8;
+                --text-muted: #9e9d9a;
+                --text-faint: #5c5b58;
+                --accent: #60a5fa;
+                --accent-bg: #1e3154;
+                --danger: #f87171;
+                --danger-bg: #2d1515;
+            }
+        }
+
+        html,
+        body {
+            height: 100%;
+            font-family: var(--font);
+            background: var(--bg);
+            color: var(--text);
+            font-size: 14px;
+        }
+
+        /* ── Buttons ── */
+        .btn {
+            font-size: 13px;
+            padding: 6px 14px;
+            border-radius: var(--r);
+            border: 1px solid var(--border-strong);
+            background: var(--surface);
+            color: var(--text);
+            cursor: pointer;
+            font-family: var(--font);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: background 0.1s;
+        }
+
+        .btn:hover {
+            background: var(--surface2);
+        }
+
+        .btn.primary {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+        }
+
+        .btn.primary:hover {
+            opacity: 0.9;
+        }
+
+        .btn.ghost {
+            border-color: transparent;
+            background: transparent;
+        }
+
+        .btn.ghost:hover {
+            background: var(--surface2);
+        }
+
+        .btn.danger {
+            color: var(--danger);
+        }
+
+        .btn.danger:hover {
+            background: var(--danger-bg);
+            border-color: var(--danger);
+        }
+
+        .btn svg {
+            width: 14px;
+            height: 14px;
+            flex-shrink: 0;
+        }
+
+        .icon-btn {
+            width: 28px;
+            height: 28px;
+            border-radius: var(--r);
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-faint);
+            font-size: 14px;
+            transition: background 0.1s;
+        }
+
+        .icon-btn:hover {
+            background: var(--surface2);
+            color: var(--text);
+        }
+
+        /* ── Upload screen ── */
+        .upload-screen {
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .upload-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--rl);
+            padding: 44px 52px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 18px;
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .upload-card h1 {
+            font-size: 17px;
+            font-weight: 500;
+        }
+
+        .upload-card p {
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        .upload-drop {
+            width: 100%;
+            border: 1.5px dashed var(--border-strong);
+            border-radius: var(--rl);
+            padding: 28px;
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .upload-drop:hover,
+        .upload-drop.over {
+            border-color: var(--accent);
+            background: var(--accent-bg);
+            color: var(--text);
+        }
+
+        .upload-drop strong {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text);
+            margin-bottom: 4px;
+        }
+
+        .upload-error {
+            font-size: 12px;
+            color: var(--danger);
+            min-height: 16px;
+        }
+
+        /* ── App ── */
+        .app {
+            display: none;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            height: 50px;
+            flex-shrink: 0;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .topbar-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .app-name {
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+        }
+
+        .app-name span {
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        .stats {
+            display: flex;
+            gap: 6px;
+        }
+
+        .pill {
+            font-size: 12px;
+            padding: 2px 10px;
+            border-radius: 99px;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            background: var(--surface2);
+        }
+
+        .pill.done {
+            background: #ecfdf5;
+            color: #065f46;
+            border-color: #a7f3d0;
+        }
+
+        @media (prefers-color-scheme:dark) {
+            .pill.done {
+                background: #064e3b;
+                color: #6ee7b7;
+                border-color: #065f46;
+            }
+        }
+
+        .topbar-right {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+
+
+        .body {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* ── Item panel ── */
+        .item-panel {
+            width: 232px;
+            flex-shrink: 0;
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            background: var(--surface);
+        }
+
+        .panel-head {
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--text-faint);
+        }
+
+        .search-wrap {
+            padding: 7px 9px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .search-wrap input {
+            width: 100%;
+            padding: 5px 9px;
+            font-size: 13px;
+            border: 1px solid var(--border-strong);
+            border-radius: var(--r);
+            background: var(--surface2);
+            color: var(--text);
+            font-family: var(--font);
+            outline: none;
+        }
+
+        .search-wrap input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-bg);
+        }
+
+        .search-wrap input::placeholder {
+            color: var(--text-faint);
+        }
+
+        .filter-tabs {
+            display: flex;
+            gap: 2px;
+            padding: 5px 9px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .filter-tab {
+            font-size: 11px;
+            padding: 2px 9px;
+            border-radius: 99px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            color: var(--text-muted);
+            background: transparent;
+            font-family: var(--font);
+        }
+
+        .filter-tab.active {
+            background: var(--surface2);
+            border-color: var(--border-strong);
+            color: var(--text);
+        }
+
+        .item-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 5px;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .item-list::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .item-list::-webkit-scrollbar-thumb {
+            background: var(--border-strong);
+            border-radius: 2px;
+        }
+
+        .item-chip {
+            display: flex;
+            align-items: flex-start;
+            gap: 7px;
+            padding: 7px 9px;
+            border-radius: var(--r);
+            border: 1px solid var(--border);
+            background: var(--surface);
+            cursor: grab;
+            user-select: none;
+            transition: border-color 0.1s;
+        }
+
+        .item-chip:hover {
+            border-color: var(--border-strong);
+        }
+
+        .item-chip.selected {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px var(--accent-bg);
+        }
+
+        .item-chip.dragging {
+            opacity: 0.3;
+        }
+
+        .chip-grip {
+            color: var(--text-faint);
+            font-size: 12px;
+            flex-shrink: 0;
+            padding-top: 2px;
+        }
+
+        .chip-name {
+            font-size: 12px;
+            color: var(--text);
+            line-height: 1.4;
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+            gap: 8px;
+            color: var(--text-faint);
+            font-size: 13px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* ── Cats area ── */
+        .cats-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .cats-area::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .cats-area::-webkit-scrollbar-thumb {
+            background: var(--border-strong);
+            border-radius: 2px;
+        }
+
+        .section-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-label {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+            color: var(--text-faint);
+            white-space: nowrap;
+        }
+
+        .section-line {
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        .cat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+            gap: 7px;
+        }
+
+        .cat-zone {
+            border: 1px solid var(--border);
+            border-radius: var(--rl);
+            background: var(--surface);
+            padding: 9px 11px;
+            height: 88px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            transition: border-color 0.12s, background 0.12s;
+            overflow: hidden;
+        }
+
+        .cat-zone.drag-over {
+            border-color: var(--accent);
+            background: var(--accent-bg);
+        }
+
+        .cat-zone.flash {
+            box-shadow: 0 0 0 2px var(--accent);
+        }
+
+        .zone-head {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .zone-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .zone-name {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text);
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .zone-count {
+            font-size: 11px;
+            color: var(--text-faint);
+            flex-shrink: 0;
+        }
+
+        .zone-edit-btn {
+            opacity: 0;
+            flex-shrink: 0;
+        }
+
+        .cat-zone:hover .zone-edit-btn {
+            opacity: 1;
+        }
+
+        .zone-items {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .zone-items::-webkit-scrollbar {
+            width: 3px;
+        }
+
+        .zone-items::-webkit-scrollbar-thumb {
+            background: var(--border-strong);
+            border-radius: 2px;
+        }
+
+        .drop-hint {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            color: var(--text-faint);
+            border: 1px dashed var(--border);
+            border-radius: 6px;
+            min-height: 36px;
+        }
+
+        .zone-chip {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 5px;
+            background: var(--surface2);
+            color: var(--text-muted);
+        }
+
+        .zone-chip span {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .zone-chip-rm {
+            flex-shrink: 0;
+            width: 14px;
+            height: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            cursor: pointer;
+            color: var(--text-faint);
+            opacity: 0;
+            font-size: 10px;
+            border: none;
+            background: none;
+            font-family: var(--font);
+            transition: opacity 0.1s;
+        }
+
+        .zone-chip:hover .zone-chip-rm {
+            opacity: 1;
+        }
+
+        .zone-more {
+            font-size: 10px;
+            color: var(--text-faint);
+            padding: 1px 6px;
+        }
+
+        /* ── Action bar ── */
+        .action-bar {
+            position: fixed;
+            bottom: 18px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--text);
+            color: var(--bg);
+            padding: 9px 14px;
+            border-radius: 11px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.15s;
+            white-space: nowrap;
+            z-index: 100;
+            max-width: 82vw;
+        }
+
+        .action-bar.visible {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .action-name {
+            font-weight: 500;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 300px;
+        }
+
+        .action-esc {
+            font-size: 12px;
+            padding: 3px 9px;
+            border-radius: 6px;
+            cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.1);
+            color: inherit;
+            font-family: var(--font);
+        }
+
+        /* ── Settings drawer ── */
+        .drawer-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.35);
+            z-index: 200;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+
+        .drawer-overlay.open {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .drawer {
+            position: fixed;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            width: 400px;
+            max-width: 95vw;
+            background: var(--surface);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            z-index: 201;
+            transform: translateX(100%);
+            transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .drawer.open {
+            transform: translateX(0);
+        }
+
+        .drawer-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        .drawer-head h2 {
+            font-size: 15px;
+            font-weight: 500;
+        }
+
+        .drawer-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 14px 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .drawer-body::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .drawer-body::-webkit-scrollbar-thumb {
+            background: var(--border-strong);
+            border-radius: 2px;
+        }
+
+        .drawer-footer {
+            padding: 12px 18px;
+            border-top: 1px solid var(--border);
+            flex-shrink: 0;
+            display: flex;
+            gap: 8px;
+        }
+
+        /* Category row in drawer */
+        .cat-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border-radius: var(--r);
+            border: 1px solid var(--border);
+            background: var(--surface2);
+        }
+
+        .cat-row-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .cat-row input[type=text] {
+            flex: 1;
+            min-width: 0;
+            padding: 3px 6px;
+            font-size: 13px;
+            border-radius: 5px;
+            border: 1px solid transparent;
+            background: transparent;
+            color: var(--text);
+            font-family: var(--font);
+            outline: none;
+        }
+
+        .cat-row input[type=text]:focus {
+            border-color: var(--accent);
+            background: var(--surface);
+        }
+
+        .cat-row-key {
+            width: 34px;
+            padding: 3px 5px;
+            font-size: 12px;
+            font-family: var(--mono);
+            text-align: center;
+            border-radius: 5px;
+            border: 1px solid var(--border-strong);
+            background: var(--surface);
+            color: var(--text);
+            outline: none;
+        }
+
+        .cat-row-key:focus {
+            border-color: var(--accent);
+        }
+
+        .cat-row select {
+            font-size: 12px;
+            padding: 3px 5px;
+            border-radius: 5px;
+            border: 1px solid var(--border-strong);
+            background: var(--surface);
+            color: var(--text);
+            font-family: var(--font);
+            outline: none;
+            cursor: pointer;
+        }
+
+        .cat-row select:focus {
+            border-color: var(--accent);
+        }
+
+        .drawer-section-label {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--text-faint);
+            padding: 4px 0 0;
+        }
+
+        .add-cat-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .add-cat-row input {
+            flex: 1;
+            padding: 6px 10px;
+            font-size: 13px;
+            border-radius: var(--r);
+            border: 1px solid var(--border-strong);
+            background: var(--surface2);
+            color: var(--text);
+            font-family: var(--font);
+            outline: none;
+        }
+
+        .add-cat-row input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-bg);
+        }
+
+        .add-cat-row select {
+            padding: 6px 8px;
+            font-size: 13px;
+            border-radius: var(--r);
+            border: 1px solid var(--border-strong);
+            background: var(--surface2);
+            color: var(--text);
+            font-family: var(--font);
+            outline: none;
+        }
+
+        .key-conflict {
+            font-size: 11px;
+            color: var(--danger);
+            padding: 2px 0;
+            min-height: 16px;
+        }
+
+        /* Color picker popover */
+        .color-popover {
+            position: absolute;
+            z-index: 300;
+            background: var(--surface);
+            border: 1px solid var(--border-strong);
+            border-radius: var(--r);
+            padding: 10px;
+            display: grid;
+            grid-template-columns: repeat(6, 22px);
+            gap: 5px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+        }
+
+        .color-swatch {
+            width: 22px;
+            height: 22px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: transform 0.1s;
+        }
+
+        .color-swatch:hover {
+            transform: scale(1.15);
+        }
+
+        .color-swatch.active {
+            border-color: var(--text);
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Upload screen -->
+    <div class="upload-screen" id="upload-screen">
+        <div class="upload-card">
+            <div style="font-size:32px;opacity:0.25">📋</div>
+            <h1>flippwatch labeler</h1>
+            <p>Upload a CSV with a <code>name</code> column. Other columns are ignored. Load multiple files — items
+                merge automatically.</p>
+            <div class="upload-drop" id="drop-zone">
+                <strong>Drop CSV here</strong>
+                or click to browse
+            </div>
+            <div class="upload-error" id="upload-error"></div>
+        </div>
+    </div>
+
+    <!-- Main app -->
+    <div class="app" id="app">
+        <div class="topbar">
+            <div class="topbar-left">
+                <div class="app-name">flippwatch <span>/ label items</span></div>
+                <div class="stats">
+                    <div class="pill" id="stat-rem">0 remaining</div>
+                    <div class="pill done" id="stat-done">0 labeled</div>
+                    <div class="pill" id="stat-disc"
+                        style="background:#fef2f2;color:#991b1b;border-color:#fca5a5;display:none">0 discarded</div>
+                </div>
+            </div>
+            <div class="topbar-right">
+                <button class="btn" onclick="openDrawer()">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <circle cx="8" cy="4" r="1.5" />
+                        <circle cx="8" cy="8" r="1.5" />
+                        <circle cx="8" cy="12" r="1.5" />
+                        <line x1="10" y1="4" x2="14" y2="4" />
+                        <line x1="10" y1="8" x2="14" y2="8" />
+                        <line x1="10" y1="12" x2="14" y2="12" />
+                        <line x1="2" y1="4" x2="6" y2="4" />
+                        <line x1="2" y1="8" x2="6" y2="8" />
+                        <line x1="2" y1="12" x2="6" y2="12" />
+                    </svg>
+                    Categories
+                </button>
+                <button class="btn" onclick="loadMore()">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M2 10v3a1 1 0 001 1h10a1 1 0 001-1v-3M8 2v8M5 7l3 3 3-3" />
+                    </svg>
+                    Load CSV
+                </button>
+                <button class="btn primary" onclick="exportCSV()">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M2 10v3a1 1 0 001 1h10a1 1 0 001-1v-3M8 10V2M5 5l3-3 3 3" />
+                    </svg>
+                    Export CSV
+                </button>
+            </div>
+        </div>
+
+
+
+        <div class="body">
+            <div class="item-panel">
+                <div class="panel-head">Unlabeled</div>
+                <div class="search-wrap"><input type="text" id="search" placeholder="Filter…"
+                        oninput="renderItemList()" /></div>
+                <div class="filter-tabs">
+                    <button class="filter-tab active" onclick="setFilter('all',this)">All</button>
+                    <button class="filter-tab" onclick="setFilter('labeled',this)">Labeled</button>
+                    <button class="filter-tab" onclick="setFilter('discarded',this)">Discarded</button>
+                </div>
+                <div class="item-list" id="item-list"></div>
+            </div>
+
+            <div class="cats-area" id="cats-area"></div>
+        </div>
+    </div>
+
+    <!-- Action bar -->
+    <div class="action-bar" id="action-bar">
+        <span class="action-name" id="action-name">—</span>
+        <button class="action-esc"
+            style="background:rgba(220,38,38,0.15);border-color:rgba(220,38,38,0.4);color:#fca5a5"
+            onclick="discardSelected()">Discard</button>
+        <button class="action-esc" onclick="clearSelection()">Esc</button>
+    </div>
+
+    <!-- Settings drawer -->
+    <div class="drawer-overlay" id="drawer-overlay" onclick="closeDrawer()"></div>
+    <div class="drawer" id="drawer">
+        <div class="drawer-head">
+            <h2>Edit categories</h2>
+            <button class="icon-btn" onclick="closeDrawer()">✕</button>
+        </div>
+        <div class="drawer-body" id="drawer-body"></div>
+        <div class="drawer-footer">
+            <button class="btn primary" onclick="saveDrawer()">Save changes</button>
+            <button class="btn" onclick="closeDrawer()">Cancel</button>
+            <button class="btn danger" style="margin-left:auto" onclick="resetCats()">Reset to defaults</button>
+        </div>
+    </div>
+
+    <!-- Color popover -->
+    <div class="color-popover" id="color-popover" style="display:none"></div>
+
+    <input type="file" id="file-input" accept=".csv" style="display:none" onchange="handleFile(event)" />
+
+    <script>
+        // ── Default categories ──
+        const DEFAULT_CATS = [
+            { id: "fruit", label: "fruit", color: "#639922", key: "1", group: "whole" },
+            { id: "vegetable", label: "vegetable", color: "#3B6D11", key: "2", group: "whole" },
+            { id: "meat", label: "meat", color: "#D85A30", key: "3", group: "whole" },
+            { id: "fish", label: "fish", color: "#185FA5", key: "4", group: "whole" },
+            { id: "dairy", label: "dairy", color: "#1D9E75", key: "5", group: "whole" },
+            { id: "eggs", label: "eggs", color: "#EF9F27", key: "6", group: "whole" },
+            { id: "cheese", label: "cheese", color: "#BA7517", key: "7", group: "whole" },
+            { id: "oils", label: "oils", color: "#888780", key: "8", group: "whole" },
+            { id: "shellfish", label: "shellfish", color: "#185FA5", key: "a", group: "whole" },
+            { id: "nuts", label: "nuts", color: "#993556", key: "c", group: "whole" },
+            { id: "seasoning", label: "seasoning", color: "#0f766e", key: "f", group: "whole" },
+            { id: "deli", label: "deli", color: "#D85A30", key: "q", group: "processed" },
+            { id: "frozen_meals", label: "frozen meals", color: "#378ADD", key: "w", group: "processed" },
+            { id: "snacks", label: "snacks", color: "#D4537E", key: "e", group: "processed" },
+            { id: "bakery", label: "bakery", color: "#BA7517", key: "r", group: "processed" },
+            { id: "beverages", label: "beverages", color: "#185FA5", key: "t", group: "processed" },
+            { id: "pantry", label: "pantry", color: "#888780", key: "y", group: "processed" },
+            { id: "sweets", label: "sweets", color: "#993556", key: "u", group: "processed" },
+            { id: "pasta", label: "pasta", color: "#7c3aed", key: "b", group: "processed" },
+            { id: "sauces", label: "sauces", color: "#b45309", key: "d", group: "processed" },
+            { id: "household", label: "household", color: "#5F5E5A", key: "h", group: "nonfood" },
+            { id: "invalid", label: "invalid", color: "#E24B4A", key: "z", group: "invalid" },
+        ];
+
+        const PALETTE = [
+            "#D85A30", "#E24B4A", "#993556", "#D4537E", "#993AB7",
+            "#185FA5", "#378ADD", "#1D9E75", "#3B6D11", "#639922",
+            "#EF9F27", "#BA7517", "#888780", "#5F5E5A", "#2C2C2A",
+            "#0f766e", "#1d4ed8", "#7c3aed", "#be185d", "#b45309",
+            "#065f46", "#1e40af", "#4c1d95", "#831843", "#78350f",
+            "#134e4a", "#1e3a5f", "#3b0764", "#500724", "#451a03",
+        ];
+
+        // ── localStorage persistence ──
+        const LS_CATS_KEY = 'flippwatch_cats';
+
+        function saveCats() {
+            try { localStorage.setItem(LS_CATS_KEY, JSON.stringify(CATS)); } catch (e) { }
+        }
+
+        function loadCats() {
+            try {
+                const raw = localStorage.getItem(LS_CATS_KEY);
+                if (raw) return JSON.parse(raw);
+            } catch (e) { }
+            return null;
+        }
+
+        let CATS = loadCats() || DEFAULT_CATS.map(c => ({ ...c }));
+
+        // Whole food IDs derived from group
+        const WHOLE_FOOD_IDS = new Set(CATS.filter(c => c.group === 'whole').map(c => c.id));
+
+        // ── State ──
+        let allItems = [];
+        const labeled = {};
+        const discarded = new Set();
+        let selectedItem = null;
+        let dragItem = null;
+        let currentFilter = "all";
+
+
+
+        // ── CSV parsing ──
+        function parseCSV(text) {
+            const lines = text.split(/\r?\n/).filter(l => l.trim());
+            if (lines.length < 2) return [];
+            const headers = splitRow(lines[0]).map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
+            const nameIdx = headers.indexOf('name');
+            if (nameIdx === -1) return null;
+            return lines.slice(1).map(l => {
+                const cols = splitRow(l);
+                const name = (cols[nameIdx] || '').replace(/^"|"$/g, '').trim();
+                return name ? { name } : null;
+            }).filter(Boolean);
+        }
+
+        function splitRow(row) {
+            const cols = []; let cur = ''; let inQ = false;
+            for (let i = 0; i < row.length; i++) {
+                const c = row[i];
+                if (c === '"') { inQ = !inQ; }
+                else if (c === ',' && !inQ) { cols.push(cur); cur = ''; }
+                else cur += c;
+            }
+            cols.push(cur); return cols;
+        }
+
+        function loadCSVText(text, fname) {
+            const items = parseCSV(text);
+            if (items === null) { showUploadError(`"${fname}" has no "name" column.`); return; }
+            if (!items.length) { showUploadError(`"${fname}" has no rows.`); return; }
+            const existing = new Set(allItems.map(i => i.name));
+            let added = 0;
+            items.forEach(it => { if (!existing.has(it.name)) { allItems.push(it); existing.add(it.name); added++; } });
+            showApp();
+            renderAll();
+            if (added === 0) showToast('No new items — all already loaded.');
+            else showToast(`Loaded ${added} items from ${fname}`);
+        }
+
+        function showUploadError(msg) {
+            const el = document.getElementById('upload-error');
+            el.textContent = msg;
+        }
+
+        function handleFile(e) {
+            const f = e.target.files[0]; if (!f) return;
+            const r = new FileReader();
+            r.onload = ev => loadCSVText(ev.target.result, f.name);
+            r.readAsText(f); e.target.value = '';
+        }
+
+        function loadMore() { document.getElementById('file-input').click(); }
+
+        // Drop on upload screen
+        const dropZone = document.getElementById('drop-zone');
+        dropZone.addEventListener('click', () => document.getElementById('file-input').click());
+        dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('over'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
+        dropZone.addEventListener('drop', e => {
+            e.preventDefault(); dropZone.classList.remove('over');
+            const f = e.dataTransfer.files[0]; if (!f) return;
+            const r = new FileReader();
+            r.onload = ev => loadCSVText(ev.target.result, f.name);
+            r.readAsText(f);
+        });
+
+        function showApp() {
+            document.getElementById('upload-screen').style.display = 'none';
+            document.getElementById('app').style.display = 'flex';
+        }
+
+        // ── Item list ──
+        function getVisible() {
+            const q = document.getElementById('search').value.trim().toLowerCase();
+            let items;
+            if (currentFilter === 'labeled') items = allItems.filter(i => labeled[i.name] && !discarded.has(i.name));
+            else if (currentFilter === 'discarded') items = allItems.filter(i => discarded.has(i.name));
+            else items = allItems.filter(i => !labeled[i.name] && !discarded.has(i.name));
+            if (q) items = items.filter(i => i.name.toLowerCase().includes(q));
+            return items;
+        }
+
+        function setFilter(f, el) {
+            currentFilter = f;
+            document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+            el.classList.add('active'); renderItemList();
+        }
+
+        function renderItemList() {
+            const list = document.getElementById('item-list');
+            list.innerHTML = '';
+            const items = getVisible();
+            if (!items.length) {
+                const msg = currentFilter === 'labeled' ? 'Nothing labeled yet.' : currentFilter === 'discarded' ? 'Nothing discarded.' : 'All done!';
+                list.innerHTML = `<div class="empty-state">${msg}</div>`;
+                return;
+            }
+            items.forEach(item => {
+                const isDisc = discarded.has(item.name);
+                const chip = document.createElement('div');
+                chip.className = 'item-chip' + (selectedItem === item.name ? ' selected' : '') + (isDisc ? ' discarded' : '');
+                if (isDisc) chip.style.cssText = 'opacity:0.5;border-style:dashed;cursor:default';
+                chip.draggable = !isDisc; chip.dataset.name = item.name;
+                chip.innerHTML = `<div class="chip-grip">${isDisc ? '✕' : '⠿'}</div><div class="chip-name">${esc(item.name)}</div>${isDisc ? `<button style="flex-shrink:0;font-size:10px;padding:2px 6px;border-radius:4px;border:1px solid var(--border-strong);background:var(--surface2);color:var(--text-muted);cursor:pointer;font-family:var(--font)" onclick="restoreItem('${item.name.replace(/'/g, "\\'")}')">restore</button>` : ''}`;
+                if (!isDisc) {
+                    chip.addEventListener('click', () => selectItem(item.name));
+                    chip.addEventListener('dragstart', e => { dragItem = item.name; chip.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
+                    chip.addEventListener('dragend', () => chip.classList.remove('dragging'));
+                }
+                list.appendChild(chip);
+            });
+        }
+
+        // ── Categories ──
+        function renderCatsArea() {
+            const area = document.getElementById('cats-area');
+            area.innerHTML = '';
+            const groups = [
+                { id: 'whole', label: 'Whole foods' },
+                { id: 'processed', label: 'Processed / packaged' },
+                { id: 'nonfood', label: 'Non-food' },
+                { id: 'invalid', label: 'Invalid' },
+            ];
+            groups.forEach(g => {
+                const cats = CATS.filter(c => c.group === g.id);
+                if (!cats.length) return;
+                const row = document.createElement('div'); row.className = 'section-row';
+                row.innerHTML = `<div class="section-label">${g.label}</div><div class="section-line"></div>`;
+                area.appendChild(row);
+                const grid = document.createElement('div'); grid.className = 'cat-grid';
+                cats.forEach(cat => grid.appendChild(buildZone(cat)));
+                area.appendChild(grid);
+            });
+        }
+
+        function buildZone(cat) {
+            const items = allItems.filter(i => labeled[i.name] === cat.id).map(i => i.name);
+            const zone = document.createElement('div');
+            zone.className = 'cat-zone'; zone.dataset.cat = cat.id;
+            zone.innerHTML = `
+    <div class="zone-head">
+      <span class="zone-dot" style="background:${cat.color}"></span>
+      <span class="zone-name">${esc(cat.label)}</span>
+      <span class="zone-count">${items.length || ''}</span>
+      <button class="icon-btn zone-edit-btn" title="Edit category" onclick="openDrawer()" style="width:20px;height:20px;font-size:11px">✎</button>
+    </div>
+    <div class="zone-items" id="zi-${cat.id}"></div>`;
+            const zi = zone.querySelector(`#zi-${cat.id}`);
+            if (!items.length) {
+                zi.innerHTML = `<div class="drop-hint">drop here</div>`;
+            } else {
+                items.forEach(name => {
+                    const c = document.createElement('div'); c.className = 'zone-chip';
+                    c.innerHTML = `<span>${esc(name)}</span><button class="zone-chip-rm">✕</button>`;
+                    c.querySelector('.zone-chip-rm').addEventListener('click', () => { delete labeled[name]; renderAll(); });
+                    zi.appendChild(c);
+                });
+            }
+            zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+            zone.addEventListener('dragleave', e => { if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over'); });
+            zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); if (dragItem) { assign(dragItem, cat.id); dragItem = null; } });
+            zone.addEventListener('click', e => { if (selectedItem && !e.target.classList.contains('zone-chip-rm') && !e.target.classList.contains('zone-edit-btn')) assign(selectedItem, cat.id); });
+            return zone;
+        }
+
+        // ── Assign / select ──
+        function assign(name, catId) {
+            labeled[name] = catId;
+            if (selectedItem === name) {
+                const next = allItems.filter(i => !labeled[i.name] && i.name !== name)[0];
+                if (next) selectItem(next.name); else clearSelection();
+            }
+            flash(catId); renderAll();
+        }
+
+        function selectItem(name) {
+            if (selectedItem === name) { clearSelection(); return; }
+            selectedItem = name;
+            document.getElementById('action-name').textContent = name;
+            document.getElementById('action-bar').classList.add('visible');
+            renderItemList();
+        }
+
+        function clearSelection() {
+            selectedItem = null;
+            document.getElementById('action-bar').classList.remove('visible');
+            renderItemList();
+        }
+
+        function flash(catId) {
+            const z = document.querySelector(`.cat-zone[data-cat="${catId}"]`);
+            if (!z) return; z.classList.add('flash'); setTimeout(() => z.classList.remove('flash'), 300);
+        }
+
+        function discardSelected() {
+            if (!selectedItem) return;
+            discarded.add(selectedItem);
+            delete labeled[selectedItem];
+            const next = allItems.filter(i => !labeled[i.name] && !discarded.has(i.name) && i.name !== selectedItem)[0];
+            if (next) selectItem(next.name); else clearSelection();
+            renderAll();
+        }
+
+        function restoreItem(name) {
+            discarded.delete(name);
+            renderAll();
+        }
+
+
+
+        // ── Stats ──
+        function updateStats() {
+            const done = Object.keys(labeled).length, total = allItems.length, disc = discarded.size;
+            document.getElementById('stat-rem').textContent = `${total - done - disc} remaining`;
+            document.getElementById('stat-done').textContent = `${done} labeled`;
+            const discPill = document.getElementById('stat-disc');
+            discPill.textContent = `${disc} discarded`;
+            discPill.style.display = disc > 0 ? '' : 'none';
+        }
+
+
+
+        // ── Export ──
+        function exportCSV() {
+            const rows = [['name', 'category', 'group', 'whole_food']];
+            allItems.forEach(item => {
+                const cat = labeled[item.name]; if (!cat || discarded.has(item.name)) return;
+                const catObj = CATS.find(c => c.id === cat);
+                const group = catObj ? catObj.group : '';
+                const wf = WHOLE_FOOD_IDS.has(cat) || catObj?.group === 'whole' ? 'true' : 'false';
+                rows.push([`"${item.name.replace(/"/g, '""')}"`, cat, group, wf]);
+            });
+            if (rows.length === 1) { showToast('Nothing labeled yet.'); return; }
+            const blob = new Blob([rows.map(r => r.join(',')).join('\n')], { type: 'text/csv' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+            a.download = `flippwatch_labels_${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+        }
+
+        // ── Drawer (category editor) ──
+        let drawerCats = []; // working copy while drawer is open
+        let activeColorTarget = null; // index in drawerCats
+
+        function openDrawer() {
+            drawerCats = CATS.map(c => ({ ...c })); // deep copy
+            renderDrawer();
+            document.getElementById('drawer-overlay').classList.add('open');
+            document.getElementById('drawer').classList.add('open');
+        }
+
+        function closeDrawer() {
+            document.getElementById('drawer-overlay').classList.remove('open');
+            document.getElementById('drawer').classList.remove('open');
+            hideColorPopover();
+        }
+
+        function saveDrawer() {
+            // Validate: check for duplicate keys
+            const keys = drawerCats.map(c => c.key.toLowerCase()).filter(Boolean);
+            const dups = keys.filter((k, i) => keys.indexOf(k) !== i);
+            if (dups.length) { document.getElementById('key-conflict').textContent = `Duplicate keys: ${[...new Set(dups)].join(', ')}`; return; }
+
+            CATS = drawerCats.filter(c => c.label.trim() && c.id);
+            WHOLE_FOOD_IDS.clear();
+            CATS.filter(c => c.group === 'whole').forEach(c => WHOLE_FOOD_IDS.add(c.id));
+            saveCats();
+            closeDrawer();
+            renderAll();
+        }
+
+        function renderDrawer() {
+            const body = document.getElementById('drawer-body');
+            body.innerHTML = '';
+
+            ['whole', 'processed', 'nonfood', 'invalid'].forEach(group => {
+                const label = { whole: 'Whole foods', processed: 'Processed / packaged', nonfood: 'Non-food', invalid: 'Invalid' }[group];
+                const groupDiv = document.createElement('div'); groupDiv.className = 'drawer-section-label'; groupDiv.textContent = label;
+                body.appendChild(groupDiv);
+
+                drawerCats.forEach((cat, idx) => {
+                    if (cat.group !== group) return;
+                    const row = document.createElement('div'); row.className = 'cat-row';
+                    row.innerHTML = `
+        <span class="cat-row-dot" style="background:${cat.color}" title="Change color" data-idx="${idx}"></span>
+        <input type="text" value="${esc(cat.label)}" placeholder="Category name" data-idx="${idx}" data-field="label" />
+        <select data-idx="${idx}" data-field="group">
+          <option value="whole"${cat.group === 'whole' ? ' selected' : ''}>whole</option>
+          <option value="processed"${cat.group === 'processed' ? ' selected' : ''}>processed</option>
+          <option value="nonfood"${cat.group === 'nonfood' ? ' selected' : ''}>non-food</option>
+          <option value="invalid"${cat.group === 'invalid' ? ' selected' : ''}>invalid</option>
+        </select>
+        <button class="icon-btn danger" title="Delete" data-idx="${idx}" data-action="delete" style="font-size:13px">✕</button>`;
+                    // Bind events
+                    row.querySelector('.cat-row-dot').addEventListener('click', e => { e.stopPropagation(); showColorPopover(idx, e.currentTarget); });
+                    row.querySelectorAll('input,select').forEach(el => el.addEventListener('input', e => {
+                        const i = parseInt(el.dataset.idx), f = el.dataset.field;
+                        drawerCats[i][f] = el.value;
+                        if (f === 'group') { closeDrawer(); openDrawer(); } // re-render sections
+                    }));
+                    row.querySelector('[data-action="delete"]').addEventListener('click', e => {
+                        const i = parseInt(e.currentTarget.dataset.idx);
+                        const catId = drawerCats[i].id;
+                        // Unlabel items in this category
+                        Object.keys(labeled).forEach(name => { if (labeled[name] === catId) delete labeled[name]; });
+                        drawerCats.splice(i, 1); renderDrawer();
+                    });
+                    body.appendChild(row);
+                });
+            });
+
+            // Conflict warning
+            const conflict = document.createElement('div'); conflict.id = 'key-conflict'; conflict.className = 'key-conflict';
+            body.appendChild(conflict);
+
+            // Add new category
+            const addLabel = document.createElement('div'); addLabel.className = 'drawer-section-label'; addLabel.textContent = 'Add category';
+            body.appendChild(addLabel);
+            const addRow = document.createElement('div'); addRow.className = 'add-cat-row';
+            addRow.innerHTML = `
+    <input type="text" id="new-cat-name" placeholder="Category name" />
+    <select id="new-cat-group">
+      <option value="whole">whole</option>
+      <option value="processed" selected>processed</option>
+      <option value="nonfood">non-food</option>
+      <option value="invalid">invalid</option>
+    </select>
+    <button class="btn" onclick="addCat()">Add</button>`;
+            body.appendChild(addRow);
+        }
+
+        function resetCats() {
+            if (!confirm('Reset to default categories? Any custom categories will be removed and items labeled with them will be unlabeled.')) return;
+            CATS = DEFAULT_CATS.map(c => ({ ...c }));
+            WHOLE_FOOD_IDS.clear();
+            CATS.filter(c => c.group === 'whole').forEach(c => WHOLE_FOOD_IDS.add(c.id));
+            saveCats();
+            // Unlabel anything whose category no longer exists
+            const validIds = new Set(CATS.map(c => c.id));
+            Object.keys(labeled).forEach(name => { if (!validIds.has(labeled[name])) delete labeled[name]; });
+            closeDrawer();
+            renderAll();
+        }
+
+        function addCat() {
+            const name = document.getElementById('new-cat-name').value.trim();
+            const group = document.getElementById('new-cat-group').value;
+            if (!name) return;
+            // Pick next free key
+            const used = new Set(drawerCats.map(c => c.key.toLowerCase()));
+            const candidates = 'abcdefghijklmnopqrstuvwxyz0123456789';
+            let key = ''; for (const k of candidates) { if (!used.has(k)) { key = k; break; } }
+            const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+            drawerCats.push({ id, label: name, color: PALETTE[drawerCats.length % PALETTE.length], key, group });
+            renderDrawer();
+        }
+
+        // ── Color popover ──
+        function showColorPopover(idx, target) {
+            activeColorTarget = idx;
+            const pop = document.getElementById('color-popover');
+            pop.innerHTML = '';
+            PALETTE.forEach(color => {
+                const sw = document.createElement('div'); sw.className = 'color-swatch';
+                if (drawerCats[idx].color === color) sw.classList.add('active');
+                sw.style.background = color;
+                sw.addEventListener('click', e => { e.stopPropagation(); drawerCats[idx].color = color; hideColorPopover(); renderDrawer(); });
+                pop.appendChild(sw);
+            });
+            const rect = target.getBoundingClientRect();
+            pop.style.display = 'grid';
+            pop.style.left = rect.left + 'px';
+            pop.style.top = (rect.bottom + 6) + 'px';
+        }
+
+        function hideColorPopover() {
+            document.getElementById('color-popover').style.display = 'none';
+            activeColorTarget = null;
+        }
+        document.addEventListener('click', () => hideColorPopover());
+
+        // ── Helpers ──
+        function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+        let toastTimer;
+        function showToast(msg) {
+            clearTimeout(toastTimer);
+            const bar = document.getElementById('action-bar');
+            const nameEl = document.getElementById('action-name');
+            const btns = bar.querySelectorAll('button');
+            nameEl.textContent = msg; btns.forEach(b => b.style.display = 'none');
+            bar.classList.add('visible');
+            toastTimer = setTimeout(() => { nameEl.textContent = selectedItem || '—'; btns.forEach(b => b.style.display = ''); if (!selectedItem) bar.classList.remove('visible'); }, 2500);
+        }
+
+        function renderAll() { renderCatsArea(); renderItemList(); updateStats(); }
+        renderAll();
+    </script>
+</body>
+
+</html>

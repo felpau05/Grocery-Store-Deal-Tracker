@@ -1,0 +1,25 @@
+# HTTP
+httpx==0.27.0
+
+# Config
+python-dotenv==1.0.1
+
+# Scheduler
+APScheduler==3.10.4
+
+# Database
+psycopg2-binary==2.9.9
+
+# API
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+
+# Classifier
+sentence-transformers==3.0.1
+pgvector==0.3.2
+
+# Auth
+PyJWT==2.8.0
+
+# Email alerts
+resend==2.3.0
