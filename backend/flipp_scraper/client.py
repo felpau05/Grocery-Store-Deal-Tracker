@@ -1,7 +1,41 @@
+# ── Flipp endpoints ──────────────────────────────────────────────────
+#
+#   1. GET /flipp/flyers                       -> fetch_flyers()
+#      List active flyers for a postal code.
+#
+#   2. GET /flipp/flyers/{flyer_id}             -> fetch_flyer_items()
+#      Basic items within one flyer. No description/brand/price_text.
+#
+#   3. GET dam.../flyer_items/{item_id}         -> fetch_item_detail()
+#      Full per-item detail (description, brand, price_text, ttm_url).
+#      Used via enrich_items() to batch-enrich a list of basic items.
+#
+#   4. GET /flipp/items/search?q=...            -> search_items()
+#      Keyword search across ALL active flyers at once. Returns BOTH
+#      an "items" array (flyer deals) and a separate "ecom_items"
+#      array (online products, different shape — opt in via
+#      include_ecom). An alternative to flyer-by-flyer scraping.
+#
+#   5. GET /flipp/merchants?postal_code=...     -> fetch_merchants()
+#      All merchants Flipp knows about for a postal code. Use this
+#      instead of hardcoding Config.DEFAULT_MERCHANTS if you want the
+#      merchant list to update itself as new stores appear.
+#
+#   6. GET /flipp/items/{item_id}                -> fetch_item()
+#      Single-item lookup via the backflipp host (not dam). Richest
+#      single-item payload of all six — a superset of #3 plus
+#      review_count, related_items, specs, media, current_price_range.
+#      Confirmed live to need ONLY item_id — no locale/postal_code/sid,
+#      unlike fetch_item_detail(). Heavier payload than #3, so prefer
+#      fetch_item_detail() for bulk enrichment; reach for this one
+#      when you specifically need the extra fields.
+
+
 import asyncio
 import logging
 import random
 from contextlib import asynccontextmanager
+from re import L, M
 from typing import Any
 
 import httpx
@@ -36,7 +70,7 @@ _HEADERS = {
 
 # ── Merchants (from config) ──────────────────────────────────────────
 
-MERCHANTS = Config.DEFAULT_MERCHANTS
+MERCHANTS: set[int] = Config.DEFAULT_MERCHANTS
 
 # ── Client factory ───────────────────────────────────────────────────
 
@@ -329,19 +363,32 @@ async def enrich_items(
     return await asyncio.gather(*(_enrich_one(r) for r in raw_items))
 
 
-def filter_merchants(
+def filter_flyers(
     flyers: list[dict],
-    merchants: list[str] | None = None,
+    valid_merchants: set[int] | None = None,
 ) -> list[dict]:
     """Keep only flyers from the configured merchant list."""
-    if merchants is None:
-        merchants = MERCHANTS
-
-    allowed = {m.strip().casefold() for m in merchants}
+    if valid_merchants is None:
+        valid_merchants = Config.DEFAULT_MERCHANTS
+    
+   
 
     return [
         f
         for f in flyers
-        if isinstance(f, dict)
-        and str(f.get("merchant", "")).strip().casefold() in allowed
+        if f.get("merchant_id") in valid_merchants
+    ]
+
+def filter_merchants(
+        merchants: list[dict],
+        valid_merchants: set[int] | None = None
+) -> list[dict]:
+    """Keep only wanted Merchants"""
+    if valid_merchants is None:
+        valid_merchants = Config.DEFAULT_MERCHANTS
+
+    return [
+        m
+        for m in merchants
+        if m.get("id") in valid_merchants
     ]
