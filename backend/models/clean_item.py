@@ -1,66 +1,55 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field, asdict
 from .units import Unit
+from .merchant import Merchant
 from enum import Enum
 
 
 @dataclass
 class ItemMetadata:
-    item_id: int
-    flyer_id: int
-    merchant_id: int
+    item_id: int      # from enriched_items: .id
+    flyer_id: int     # from enriched_items: .flyer_id
+    merchant_id: int  # from raw_flyers:     .merchant_id
+
+    original_name: str # from enriched_items: .name
+    original_desc: str # from enriched_items: .description
 
     
 @dataclass
 class Item:
 
-    # Clean Item Name in English
-    name: str
 
-    # Brand (if availble)
-    brand: str | None
+    # 2. Info
+    name: str                 # Cleaned name
+    brands: tuple[str, ...]    # List of brands
+    merchant_name: str             # Clean merchant name 
 
-    # Clean Merchant Name (the one flipp identifies in their backend)
-    merchant: str
-
-    #Start Date (when it went on sale) ISO 8601 date string
+    # 3. Dates (inclusive) (ISO 8601 date string)
     start_date: str
-
-    #End Date (when it stops being on sale last day) ISO 8601 date string
     end_date: str
 
-    #Pricing
-
-    #just the number
-    price: float 
-    price_unit: Unit
-
-
-    # Multiply `price` by this to get the price for ONE price_unit.
-    # 1.0 for EACH and for already-canonical units (price_text said
-    # "/g" or "/mL" directly). NOT 1.0 for "/lb", "/kg", "/100g" etc —
-    # those are quoted per a DIFFERENT amount than one canonical unit,
-    # so the raw price needs scaling before it's truly per-g/per-mL.
-    # Kept separate from `price` (rather than baking the adjustment in
-    # eagerly) so `price` always means "what the flyer literally
-    # quoted" — useful for display — and the normalization happens
-    # lazily in price_per_unit, the same way size-based division
-    # already happens lazily there instead of being pre-computed.
-    price_unit_factor: float
+    # 4. Pricing
+    price: float       # price given by flipp
+    price_unit: Unit   # unit of price found
+    _price_unit_factor: float # conversion factor from holds the inverse of UNIT_TABLE's multiplier so that price_per_unit can scale the price correctly
 
 
-
-    #just the number
+    # 5. Size
     size: float | None
     size_unit: Unit | None
 
-    # Category
-    category: str
+    # Images
+    product_image: str # actual image of product
+    cutout_image: str  # image of cutout from flyer
 
-    # How flipp identifies the time
-    meta_data: ItemMetadata
+    # Category, will be done by classifier later
+    category: str
+    
 
     high_confidence: bool
 
+    # 1. Meta Data
+    meta_data: ItemMetadata
+    
 
     @property
     def price_per_unit(self) -> tuple[float, Unit]:
@@ -68,11 +57,11 @@ class Item:
         whenever a clean per-unit value can't be computed."""
 
         # Flipp already gave us a per-unit price (e.g. "$3.99/lb") —
-        # price_unit_factor scales it to a TRUE per-canonical-unit
+        # _price_unit_factor scales it to a TRUE per-canonical-unit
         # price ($3.99/lb -> $3.99 * (1/453.592) per g), not just a
         # relabeling of the unit.
         if self.price_unit not in (Unit.EACH, None):
-            return self.price * self.price_unit_factor, self.price_unit
+            return self.price * self._price_unit_factor, self.price_unit
         
         # No size to divide by — price is just per item
         if self.size is None or self.size_unit is None:
@@ -83,15 +72,18 @@ class Item:
 
     def to_dict(self) -> dict:
         """Safely converts the dataclass to a dictionary, flattening Enums to strings."""
-        from dataclasses import asdict
         
         # Get the standard dictionary
         data = asdict(self)
+
+        # Remove private fields
+        del data["_price_unit_factor"]
         
         # Safely convert the Enums to their string values
         data["price_unit"] = self.price_unit.value if self.price_unit else None
         data["size_unit"] = self.size_unit.value if self.size_unit else None
         
+
         # Grab the calculated price and unit from your property
         calculated_price, calculated_unit = self.price_per_unit
         
@@ -102,7 +94,3 @@ class Item:
         data["price_per_unit"] = f"${calculated_price}/{unit_str}"
         
         return data
-
-    
-
-
