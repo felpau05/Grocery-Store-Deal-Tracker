@@ -25,7 +25,10 @@ class ParsedItem:
 
     size_source: str | None = None
 
-    
+    category: str = ""
+    subcategory: str = ""
+
+
 
     @property
     def high_confidence(self) -> bool:
@@ -65,7 +68,8 @@ class ParsedItem:
             product_image=raw.get("image_url") or "",
             cutout_image=raw.get("cutout_image_url") or "",
             
-            category=raw.get("category") or "", # TO DO use classifier
+            category=self.category or "",
+            subcategory=self.subcategory or "",
             
             high_confidence=self.high_confidence,
             

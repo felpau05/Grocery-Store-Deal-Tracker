@@ -3,6 +3,7 @@ import json
 import logging
 import argparse
 
+import db
 from config import Config
 from .client import (
     create_client,
@@ -28,6 +29,7 @@ async def scrape(
     postal_code: str,
     valid_merchants: set[int] | None = None,
     output_file: str | None = None,
+    persist: bool = True,
 ) -> list[Item]:
     """Full scrape pipeline: fetch flyers → items → parse → return.
 
@@ -36,6 +38,10 @@ async def scrape(
         merchants: merchant names to include (defaults to Config).
         enrich: if True, fetch per-item detail data (slower, more fields).
         output_file: if set, write parsed results as JSON to this path.
+        persist: if True (default), write stores/flyers/items to Postgres
+            via the db module. Set False for a dry run with no DB writes
+            (e.g. local dev without DATABASE_URL set) — JSON output under
+            test_outputs/ still happens either way.
     """
 
     # Roadmap:
@@ -51,6 +57,13 @@ async def scrape(
         all_merchants = await fetch_merchants(client, postal_code)
         _: list[Merchant] = [Merchant.from_dict(m) for m in filter_merchants(all_merchants, valid_merchants)]
         merchants: dict[int, Merchant] = {m.id: m for m in _}
+
+        if persist:
+            for merchant in merchants.values():
+                try:
+                    db.upsert_merchant(merchant)
+                except Exception as exc:
+                    logger.warning("Could not upsert merchant %s: %s", merchant.id, exc)
         
         # Step 1. Fetch and filter to valid flyers
         logger.info("Fetching flyers for %s", postal_code)
@@ -59,20 +72,36 @@ async def scrape(
         logger.info("Found %d flyers from %d total", len(flyers), len(all_flyers))
 
         # Step 2. Fetch items, filter out non-food items and keep their ids
-        food_items: list[dict] = []
+        all_items: list[dict] = []
 
         for flyer in flyers:
             flyer_id: int = flyer["id"]
             merchant_id: int = flyer["merchant_id"]
+
+            if persist:
+                try:
+                    # NOTE: assumes the flyer object carries its own
+                    # valid_from/valid_to, same as Flipp's item-level
+                    # fields — not independently confirmed against a
+                    # live response, since this sandbox has no network
+                    # access to Flipp's API. Double check the first
+                    # real scrape's flyers table rows aren't all NULL.
+                    db.upsert_flyer(
+                        flyer_id, merchant_id,
+                        flyer.get("valid_from"), flyer.get("valid_to"),
+                    )
+                except Exception as exc:
+                    logger.warning("Could not upsert flyer %s: %s", flyer_id, exc)
 
             try:
                 items = await fetch_flyer_items(client, flyer_id, postal_code)
 
                 for item in items:
                     item["merchant_id"] = merchant_id
+                    item["flyer_id"] = flyer_id
                 # Filter out non food items 
-                kept = [item for item in items if is_food_item(item.get("name") or "")]
-                food_items.extend(kept)
+                #kept = [item for item in items if is_food_item(item.get("name") or "")]
+                all_items.extend(items)
                 
 
                 logger.info("Merchant %s (flyer %s): %d items", merchant_id, flyer_id, len(items))
@@ -81,12 +110,12 @@ async def scrape(
                 logger.warning("Merchant %s (flyer %s): failed — %s", merchant_id, flyer_id, exc)
         
         with open(Config.TEST_OUTPUTS_PATH/"basic_items.json", "w", encoding="utf-8") as f:
-            json.dump(food_items, f, indent=2, ensure_ascii=False)
+            json.dump(all_items, f, indent=2, ensure_ascii=False)
 
         # Step 3. Extract deatiled items via item id 
         sid = generate_sid()
-        logger.info("Enriching %d items", len(food_items))
-        raw_items = await enrich_items(client, food_items, postal_code, sid)
+        logger.info("Enriching %d items", len(all_items))
+        raw_items = await enrich_items(client, all_items, postal_code, sid)
         with open(Config.TEST_OUTPUTS_PATH/"enriched_items.json", "w", encoding="utf-8") as f:
             json.dump(raw_items, f, indent=2, ensure_ascii=False)
 
@@ -96,6 +125,18 @@ async def scrape(
 
     hi = sum(1 for p in parsed if p.high_confidence)
     logger.info("Done: %d parsed, %d high confidence (%.1f%%)", len(parsed), hi, hi / max(len(parsed), 1) * 100)
+
+    # 4b. Persist to Postgres
+    if persist:
+        saved, failed = 0, 0
+        for p in parsed:
+            try:
+                db.upsert_item(p)
+                saved += 1
+            except Exception as exc:
+                failed += 1
+                logger.warning("Could not upsert item %r: %s", p.name, exc)
+        logger.info("Persisted %d items to Postgres (%d failed)", saved, failed)
 
     # 5. Output
     if output_file:
@@ -112,6 +153,10 @@ def main():
     parser = argparse.ArgumentParser(description="Flipp grocery scraper")
     parser.add_argument("--postal", default=Config.TEST_POSTAL_CODE, help="Postal code")
     parser.add_argument("--output", "-o", default=None, help="Output JSON path")
+    parser.add_argument(
+        "--no-db", action="store_true",
+        help="Skip writing to Postgres (dry run; still writes JSON under test_outputs/)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -120,9 +165,14 @@ def main():
         print("Set TEST_POSTAL_CODE in .env or pass --postal")
         return
 
+    if not args.no_db and not Config.DATABASE_URL:
+        print("DATABASE_URL is not set — pass --no-db for a dry run, or set it in .env")
+        return
+
     asyncio.run(scrape(
         postal_code=args.postal,
         output_file=args.output,
+        persist=not args.no_db,
     ))
 
 #RUN:

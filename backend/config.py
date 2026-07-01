@@ -9,6 +9,7 @@ class Config:
     # Paths of Directories and Files
     BACKEND_PATH: Path = Path(__file__).parent
     TEST_OUTPUTS_PATH = BACKEND_PATH / "test_outputs"
+    TRAINING_DATA_PATH = BACKEND_PATH / "training_data"
 
     # Database Configuration
     DATABASE_URL: str | None = os.getenv(key="DATABASE_URL")

@@ -41,14 +41,14 @@ class Item:
     product_image: str # actual image of product
     cutout_image: str  # image of cutout from flyer
 
-    # Category, will be done by classifier later
-    category: str
-    
+    category: str      # department-level classifier output (e.g. "meat seafood")
 
     high_confidence: bool
 
     # 1. Meta Data
     meta_data: ItemMetadata
+
+    subcategory: str = ""  # aisle-level classifier output (e.g. "poultry counter")
     
 
     @property

@@ -149,12 +149,24 @@ def step_parse_price_unit(item: ParsedItem) -> ParsedItem:
     return item
 
 
+def step_classify(item: ParsedItem) -> ParsedItem:
+    """Classify the cleaned item name into aisle (subcategory) + department (category)."""
+    from classifier import classify_item
+    name = item.clean_name or item.name or ""
+    if name:
+        aisle, department = classify_item(name)
+        item.subcategory = aisle
+        item.category = department
+    return item
+
+
 # ── Pipeline ─────────────────────────────────────────────────────────
 
 PIPELINE: list = [
     step_pick_english,  # must stay before step_extract_size
     step_extract_size,
-    step_clean_name,
+    step_clean_name,    # must run before step_classify
+    step_classify,
     step_parse_price,
     step_parse_price_unit,
 ]
