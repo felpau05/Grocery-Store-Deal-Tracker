@@ -1,0 +1,144 @@
+@import "tailwindcss";
+
+@theme {
+  --color-paper: #faf6ee;
+  --color-ink: #1c1a16;
+  --color-ink-soft: #5b5648;
+  --color-sale: #d6402c;
+  --color-sale-dark: #a82f1f;
+  --color-produce: #2f5233;
+  --color-tag: #f2c14e;
+  --color-border-tan: #d9cdb0;
+  --color-card: #fffdf8;
+
+  --font-display: ui-sans-serif, system-ui, "Helvetica Neue", Arial, sans-serif;
+  --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+}
+
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+}
+
+/* Perforated tear-line, used under the search bar and between sections —
+   a nod to tearing a coupon off a flyer page. */
+.tear-line {
+  background-image: radial-gradient(circle, var(--color-border-tan) 1.5px, transparent 1.6px);
+  background-size: 10px 1px;
+  background-repeat: repeat-x;
+  background-position: center;
+  height: 1px;
+}
+
+/* Visible keyboard focus, kept consistent across interactive elements */
+:focus-visible {
+  outline: 2px solid var(--color-sale);
+  outline-offset: 2px;
+}
+
+/* ── Motion ──────────────────────────────────────────────────────────
+   Used sparingly: deal cards stagger in on load, receipts "print" down
+   out of the optimizer, the price tag straightens when you reach for it.
+   All respect prefers-reduced-motion below. */
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes print-out {
+  from { opacity: 0; transform: translateY(-14px) scaleY(0.97); }
+  to   { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+
+@keyframes stamp-in {
+  0%   { opacity: 0; transform: scale(1.4) rotate(-8deg); }
+  60%  { opacity: 1; transform: scale(0.94) rotate(-3deg); }
+  100% { opacity: 1; transform: scale(1) rotate(-4deg); }
+}
+
+.animate-in {
+  animation: fade-in-up 0.4s ease-out backwards;
+}
+
+.animate-print {
+  transform-origin: top center;
+  animation: print-out 0.5s cubic-bezier(0.18, 0.9, 0.24, 1) backwards;
+}
+
+.animate-stamp {
+  animation: stamp-in 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+/* ── Receipt ─────────────────────────────────────────────────────────
+   The optimizer prints each store as a thermal receipt: a torn zigzag
+   bottom edge made of triangles in the card colour. */
+.receipt {
+  position: relative;
+  filter: drop-shadow(2px 3px 0 rgba(28, 26, 22, 0.10));
+}
+.receipt::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -7px;
+  height: 8px;
+  background-image:
+    linear-gradient(135deg, var(--color-card) 50%, transparent 50%),
+    linear-gradient(225deg, var(--color-card) 50%, transparent 50%);
+  background-size: 12px 8px;
+  background-position: 0 0;
+  background-repeat: repeat-x;
+}
+
+/* Dotted leader between an item name and its price, like a real receipt */
+.leader {
+  flex: 1;
+  margin: 0 0.4rem 0.2rem;
+  border-bottom: 1px dotted var(--color-border-tan);
+}
+
+/* Ticker tape marquee — strip is duplicated in markup, so -50% loops. */
+@keyframes ticker {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.ticker-track {
+  animation: ticker 38s linear infinite;
+}
+
+/* Sheen sweep that crosses a card on hover, like light catching glossy
+   flyer paper. Driven by group-hover translate in DealCard. */
+.sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 70%
+  );
+  transform: translateX(-130%);
+  transition: transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.group:hover .sheen {
+  transform: translateX(130%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-in,
+  .animate-print,
+  .animate-stamp {
+    animation: none;
+  }
+  .ticker-track {
+    animation: none;
+  }
+  .sheen {
+    display: none;
+  }
+}

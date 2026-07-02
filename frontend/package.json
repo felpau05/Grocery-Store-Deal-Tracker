@@ -1,0 +1,25 @@
+{
+  "name": "flippwatch-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "16.2.9",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "recharts": "3.9.0"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3",
+    "@types/node": "22.10.5",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "tailwindcss": "4.3.2",
+    "@tailwindcss/postcss": "4.3.2"
+  }
+}
