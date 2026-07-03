@@ -5,6 +5,7 @@ import argparse
 
 import db
 from config import Config
+from textutils import normalize_postal
 from .client import (
     create_client,
     fetch_flyers, fetch_flyer_items, enrich_items,
@@ -50,6 +51,10 @@ async def scrape(
 
     
 
+    # Region key written on every flyer/item so reads can scope to it.
+    # Normalized once here so it matches what the routes look up with.
+    region = normalize_postal(postal_code)
+
     async with create_client() as client:
 
         # Step 0. Fetch and filter to valid merchants
@@ -89,6 +94,7 @@ async def scrape(
                     db.upsert_flyer(
                         flyer_id, merchant_id,
                         flyer.get("valid_from"), flyer.get("valid_to"),
+                        postal_code=region,
                     )
                 except Exception as exc:
                     logger.warning("Could not upsert flyer %s: %s", flyer_id, exc)
@@ -131,7 +137,7 @@ async def scrape(
         saved, failed = 0, 0
         for p in parsed:
             try:
-                db.upsert_item(p)
+                db.upsert_item(p, postal_code=region)
                 saved += 1
             except Exception as exc:
                 failed += 1

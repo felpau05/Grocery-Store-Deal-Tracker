@@ -26,8 +26,29 @@ FRENCH_WORDS = {
     "non-vieilli", "ciel", "arc-en-ciel",
 }
 
+# Number token used by all size regexes: decimal point OR decimal comma
+# ("2,85 g" on bilingual/French flyers means 2.85 g).
+_NUM = r'\d+(?:[.,]\d+)?'
+
+
+def _num_to_float(raw: str) -> float:
+    """Parse a size number that may use a decimal comma.
+
+    "2,85" → 2.85, but a comma followed by exactly 3 digits is a
+    thousands separator: "1,000" → 1000.0.
+    """
+    raw = raw.strip()
+    if "," in raw:
+        head, _, tail = raw.partition(",")
+        if len(tail) == 3 and "." not in raw:
+            raw = head + tail
+        else:
+            raw = head + "." + tail
+    return float(raw)
+
+
 _HAS_SIZE_RE = re.compile(
-    rf'\d+(?:\.\d+)?\s*(?:{unit_token_pattern()})\b',
+    rf'{_NUM}\s*(?:{unit_token_pattern()})\b',
     re.IGNORECASE,
 )
 
@@ -89,16 +110,16 @@ def clean_name(name: str) -> str:
 _UNIT_PATTERN = unit_token_pattern()
 
 _MULTI_SIZE_RE = re.compile(
-    rf'\d+(?:\.\d+)?\s*(?:{_UNIT_PATTERN})\b', re.IGNORECASE,
+    rf'{_NUM}\s*(?:{_UNIT_PATTERN})\b', re.IGNORECASE,
 )
 
 SIZE_RE = re.compile(
     # multipack: "12 x 355 mL"
-    r',?\s*(?P<count>\d+(?:\.\d+)?)\s*[xX]\s*(?P<unit_size>\d+(?:\.\d+)?)\s*'
+    rf',?\s*(?P<count>{_NUM})\s*[xX]\s*(?P<unit_size>{_NUM})\s*'
     rf'(?P<unit_a>{_UNIT_PATTERN})\b'
     r'|'
-    # single "1.5 kg" or range "480-640 g"
-    r',?\s*(?P<single>\d+(?:\.\d+)?(?:\s*[-/]\s*\d+(?:\.\d+)?)?)\s*'
+    # single "1.5 kg" / "2,85 g" or range "480-640 g"
+    rf',?\s*(?P<single>{_NUM}(?:\s*[-/]\s*{_NUM})?)\s*'
     rf'(?P<unit_b>{_UNIT_PATTERN})\b',
     re.IGNORECASE,
 )
@@ -120,8 +141,8 @@ def extract_size(name: str) -> SizeResult:
         flags.append("multi_size")
 
     if gd.get("count") and gd.get("unit_size"):
-        raw_count = float(gd["count"])
-        raw_unit_size = float(gd["unit_size"])
+        raw_count = _num_to_float(gd["count"])
+        raw_unit_size = _num_to_float(gd["unit_size"])
         raw_unit_text = gd["unit_a"]
         unit, factor, f = resolve_unit(raw_unit_text)
         flags.extend(f)
@@ -136,13 +157,13 @@ def extract_size(name: str) -> SizeResult:
 
         if re.search(r'[-/]', raw_num):
             parts = re.split(r'\s*[-/]\s*', raw_num)
-            values = [float(p) for p in parts]
+            values = [_num_to_float(p) for p in parts]
             raw_value = sum(values) / len(values)
             lo, hi = min(values), max(values)
             if lo > 0 and hi / lo > 1.5:
                 flags.append("wide_range")
         else:
-            raw_value = float(raw_num)
+            raw_value = _num_to_float(raw_num)
 
         total = round(raw_value * factor, 3)
         quantity = None

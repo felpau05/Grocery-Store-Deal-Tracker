@@ -55,6 +55,51 @@ class TestMatchCandidates:
         assert len(walmart_rows) == 1
         assert walmart_rows[0].price == 3.99
 
+    def test_plural_singular_tolerance(self):
+        deals_plural = [deal(1, "Bananas", 1, "Walmart", 0.99)]
+        candidates, unmatched = match_candidates(["banana"], deals_plural)
+        assert unmatched == []
+        assert candidates["banana"][0].name == "Bananas"
+
+    def test_matches_brands_too(self):
+        deals_branded = [
+            {**deal(1, "Hazelnut Spread", 1, "Walmart", 5.99), "brands": ["Nutella"]},
+        ]
+        candidates, unmatched = match_candidates(["nutella"], deals_branded)
+        assert unmatched == []
+        assert candidates["nutella"][0].name == "Hazelnut Spread"
+
+
+class TestCategoryPreference:
+
+    POOL = [
+        {**deal(1, "Catch Milk Chocolate", 1, "FreshCo", 0.99), "category": "snacks"},
+        {**deal(2, "2% Milk 2L", 1, "FreshCo", 4.49), "category": "dairy eggs"},
+        {**deal(3, "Neilson Whole Milk", 2, "Walmart", 5.29), "category": "dairy eggs"},
+    ]
+
+    def test_same_category_matches_win(self):
+        candidates, _ = match_candidates(
+            ["milk"], self.POOL, query_categories={"milk": "dairy eggs"}
+        )
+        names = {r.name for r in candidates["milk"]}
+        assert "Catch Milk Chocolate" not in names
+        assert names == {"2% Milk 2L", "Neilson Whole Milk"}
+
+    def test_falls_back_to_all_matches_when_category_misses(self):
+        # Predicted category has no matching deals — keep everything
+        # rather than reporting the query unmatched.
+        candidates, unmatched = match_candidates(
+            ["milk"], self.POOL, query_categories={"milk": "beverages"}
+        )
+        assert unmatched == []
+        assert len(candidates["milk"]) == 2  # cheapest per store, all 3 rows eligible
+
+    def test_no_category_means_no_filtering(self):
+        candidates, _ = match_candidates(["milk"], self.POOL)
+        all_names = {r.name for rows in candidates.values() for r in rows}
+        assert "Catch Milk Chocolate" in all_names
+
 
 class TestCheapestMode:
 

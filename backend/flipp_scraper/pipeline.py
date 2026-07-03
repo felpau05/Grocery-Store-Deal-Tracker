@@ -150,7 +150,17 @@ def step_parse_price_unit(item: ParsedItem) -> ParsedItem:
 
 
 def step_classify(item: ParsedItem) -> ParsedItem:
-    """Classify the cleaned item name into aisle (subcategory) + department (category)."""
+    """Classify the cleaned item name into aisle (subcategory) + department (category).
+
+    BYPASSED while Config.CLASSIFIER_ENABLED is false: the model runs
+    sequentially per item and dominates scrape time. Items pass through
+    unclassified (category stays None); backfill later with a batch job
+    once classification moves out of the hot path.
+    """
+    from config import Config
+    if not Config.CLASSIFIER_ENABLED:
+        return item
+
     from classifier import classify_item
     name = item.clean_name or item.name or ""
     if name:

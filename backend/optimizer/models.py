@@ -17,6 +17,12 @@ class DealRow:
     merchant_id: int
     merchant_name: str
     price: float
+    # Display-only extras for the "pick your deal" UI; absent in older
+    # deal dicts (tests), so they default to None.
+    size: float | None = None
+    size_unit: str | None = None
+    product_image: str | None = None
+    category: str | None = None
 
 
 @dataclass
@@ -45,6 +51,9 @@ class OptimizeResult:
     mode: Mode
     store_plans: list[StorePlan]
     unmatched: list[str]   # grocery list entries with no matching deal anywhere
+    # query -> a few cheapest matching deals across all stores, so the
+    # user can swap the auto-picked item for another option.
+    options: dict[str, list[DealRow]] = field(default_factory=dict)
 
     @property
     def total_cost(self) -> float:

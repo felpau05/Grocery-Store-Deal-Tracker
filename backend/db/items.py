@@ -9,6 +9,7 @@ import re
 from models import Item
 
 from .connection import get_cursor
+from .guard import graceful_write
 
 logger = logging.getLogger("flippwatch.db.items")
 
@@ -22,10 +23,15 @@ def normalize_name(name: str) -> str:
     return re.sub(r"\s+", " ", name.lower()).strip()
 
 
-def upsert_item(item: Item) -> int:
+@graceful_write
+def upsert_item(item: Item, postal_code: str) -> int:
     """Insert or update one item, then always append a price_history row.
 
     Returns the item's database id (BIGSERIAL, not Flipp's own item id).
+
+    `postal_code` is the region the item was scraped for (already
+    normalized by the caller) — part of the dedup key so the same
+    national merchant's regional flyers don't overwrite each other.
 
     merchant_id and flyer_id come from item.meta_data — the Merchant/raw
     dict passed through the pipeline — so callers don't have to thread
@@ -42,19 +48,19 @@ def upsert_item(item: Item) -> int:
         cur.execute(
             """
             INSERT INTO items (
-                merchant_id, flyer_id, flipp_item_id, name, name_normalized,
+                merchant_id, flyer_id, flipp_item_id, postal_code, name, name_normalized,
                 original_name, original_description, brands,
                 price, price_unit, price_unit_factor,
                 size, size_unit, product_image, cutout_image,
                 category, subcategory, high_confidence, valid_from, valid_to
             ) VALUES (
-                %(merchant_id)s, %(flyer_id)s, %(flipp_item_id)s, %(name)s, %(name_normalized)s,
+                %(merchant_id)s, %(flyer_id)s, %(flipp_item_id)s, %(postal_code)s, %(name)s, %(name_normalized)s,
                 %(original_name)s, %(original_description)s, %(brands)s,
                 %(price)s, %(price_unit)s, %(price_unit_factor)s,
                 %(size)s, %(size_unit)s, %(product_image)s, %(cutout_image)s,
                 %(category)s, %(subcategory)s, %(high_confidence)s, %(valid_from)s, %(valid_to)s
             )
-            ON CONFLICT (merchant_id, name_normalized, valid_from) DO UPDATE SET
+            ON CONFLICT (merchant_id, postal_code, name_normalized, valid_from) DO UPDATE SET
                 flyer_id = EXCLUDED.flyer_id,
                 flipp_item_id = EXCLUDED.flipp_item_id,
                 name = EXCLUDED.name,
@@ -79,6 +85,7 @@ def upsert_item(item: Item) -> int:
                 "merchant_id": item.meta_data.merchant_id,
                 "flyer_id": item.meta_data.flyer_id,
                 "flipp_item_id": item.meta_data.item_id or None,
+                "postal_code": postal_code,
                 "name": item.name,
                 "name_normalized": name_normalized,
                 "original_name": item.meta_data.original_name or None,
@@ -108,6 +115,7 @@ def upsert_item(item: Item) -> int:
     return item_id
 
 
+@graceful_write
 def upsert_item_embedding(
     name_normalized: str, embedding: list[float], category: str, similarity: float
 ) -> None:

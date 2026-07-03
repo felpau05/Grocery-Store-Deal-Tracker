@@ -8,3 +8,19 @@ from wherethe labeler lives
 
 anything other than "key": null
 "key"\s*:\s*(?!\s*null\b)[^,\r\n]+
+
+
+Backend (terminal 1):
+
+cd backend
+source venv/bin/activate
+uvicorn main:app --reload
+
+
+Frontend (terminal 2):
+
+cd frontend
+npm run dev
+
+Run Scraper:
+python -m flipp_scraper.run --output results.json

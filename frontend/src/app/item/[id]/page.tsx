@@ -1,6 +1,7 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { fetchDealHistory } from "@/lib/api";
+import AddToListButton from "@/components/AddToListButton";
+import BackLink from "@/components/BackLink";
 import PriceChart from "@/components/PriceChart";
 import PriceTag from "@/components/PriceTag";
 import ImageLightbox from "@/components/ImageLightbox";
@@ -39,26 +40,31 @@ export default async function ItemPage({
 
   const { item, history } = data;
   const sizeLabel = formatSize(item.size, item.size_unit);
-  const validFrom = new Date(item.valid_from).toLocaleDateString("en-CA", { month: "short", day: "numeric" });
-  const validTo = new Date(item.valid_to).toLocaleDateString("en-CA", { month: "short", day: "numeric" });
+  // Date-only strings parse as UTC midnight — pin to local time or
+  // "Jul 2 – Jul 8" renders as "Jul 1 – Jul 7" in negative-offset zones.
+  const fmtDate = (s: string) =>
+    new Date(s.length === 10 ? `${s}T00:00:00` : s).toLocaleDateString("en-CA", {
+      month: "short",
+      day: "numeric",
+    });
+  const validFrom = fmtDate(item.valid_from);
+  const validTo = fmtDate(item.valid_to);
 
   return (
     <main className="max-w-2xl mx-auto px-6 py-10">
-      <Link href="/" className="text-sm text-ink-soft hover:text-sale transition-colors">
-        ← Back to deals
-      </Link>
+      <BackLink />
 
       {/* Hero */}
       <div className="flex items-start gap-5 mt-6">
         {(item.product_image || item.cutout_image) && (
           <div className="flex gap-2 flex-shrink-0">
             {item.product_image && (
-              <div className="w-28 h-28 rounded-sm bg-ink/5 border border-border-tan overflow-hidden">
+              <div className="w-28 h-28 bg-card border-2 border-ink shadow-[3px_3px_0_var(--color-ink)] overflow-hidden">
                 <ImageLightbox src={item.product_image} alt={item.name} />
               </div>
             )}
             {item.cutout_image && item.cutout_image !== item.product_image && (
-              <div className="w-28 h-28 rounded-sm bg-ink/5 border border-border-tan overflow-hidden">
+              <div className="w-28 h-28 bg-card border-2 border-ink shadow-[3px_3px_0_var(--color-ink)] overflow-hidden">
                 <ImageLightbox src={item.cutout_image} alt={`${item.name} — flyer cutout`} />
               </div>
             )}
@@ -66,28 +72,44 @@ export default async function ItemPage({
         )}
         <div className="flex-1 min-w-0">
           {item.brands.length > 0 && (
-            <p className="font-mono text-[11px] uppercase tracking-[0.15em] text-ink-soft mb-1">
+            <p className="font-mono font-bold text-[11px] uppercase tracking-[0.15em] text-ink-soft mb-1">
               {item.brands.join(" · ")}
             </p>
           )}
-          <h1 className="font-display font-extrabold text-2xl text-ink leading-tight">
+          <h1 className="font-display text-2xl text-ink leading-[1.05]">
             {item.name}
           </h1>
-          <p className="text-[13px] text-ink-soft mt-1">{item.merchant_name}</p>
+          <p className="font-mono font-bold text-[12px] uppercase tracking-[0.1em] text-ink-soft mt-1.5">
+            @ {item.merchant_name}
+          </p>
         </div>
         <div className="shrink-0 mt-1">
           <PriceTag
             price={item.price}
             perUnit={item.price_per_unit}
             perUnitLabel={item.price_per_unit_label}
+            highConfidence={item.high_confidence}
           />
         </div>
+      </div>
+
+      <div className="mt-5">
+        <AddToListButton
+          name={item.name}
+          source={{
+            itemId: item.id,
+            merchantId: item.merchant_id,
+            merchantName: item.merchant_name,
+            price: item.price,
+            image: item.product_image,
+          }}
+        />
       </div>
 
       <div className="tear-line my-6" />
 
       {/* Detail table */}
-      <section className="bg-card border border-border-tan rounded-sm px-4 py-1 mb-6">
+      <section className="brut px-4 py-1 mb-6">
         <DetailRow
           label="Price"
           value={
@@ -128,8 +150,8 @@ export default async function ItemPage({
       {/* Raw flyer data */}
       {(item.original_name || item.original_description) && (
         <section className="mb-6">
-          <h2 className="font-display font-bold text-ink mb-3">From the flyer</h2>
-          <div className="bg-card border border-border-tan rounded-sm px-4 py-3 space-y-2">
+          <h2 className="font-display text-ink text-lg mb-3">From the flyer</h2>
+          <div className="bg-card border-2 border-ink/25 px-4 py-3 space-y-2">
             {item.original_name && item.original_name !== item.name && (
               <div>
                 <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-ink-soft/70 mb-0.5">Original name</p>
@@ -147,7 +169,7 @@ export default async function ItemPage({
       )}
 
       {/* Price history */}
-      <h2 className="font-display font-bold text-ink mb-3">30-day price history</h2>
+      <h2 className="font-display text-ink text-lg mb-3">30-day price history</h2>
       <PriceChart history={history} />
     </main>
   );

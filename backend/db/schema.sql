@@ -29,8 +29,9 @@ CREATE TRIGGER merchants_set_updated_at
 -- ## FLYERS #######################################
 -- immutable snapshot
 CREATE TABLE flyers (
-    id          BIGINT PRIMARY KEY,                 
+    id          BIGINT PRIMARY KEY,
     merchant_id    BIGINT NOT NULL REFERENCES merchants(id),
+    postal_code TEXT,                    -- region the flyer was scraped for (normalized, no spaces)
     valid_from  TIMESTAMPTZ,
     valid_to    TIMESTAMPTZ,
     scraped_at  TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -45,6 +46,14 @@ CREATE TABLE items (
     merchant_id           BIGINT NOT NULL REFERENCES merchants(id),
     flyer_id              BIGINT NOT NULL REFERENCES flyers(id),
     flipp_item_id         BIGINT,                    -- lineage only, see note above
+
+    -- Region the item was scraped for (normalized Canadian postal code,
+    -- uppercase, no spaces). REQUIRED and part of the dedup key: Flipp
+    -- merchant_ids are national, so the same store's flyer differs by
+    -- region. Without this, "Bananas" from a Toronto Walmart flyer and
+    -- an Ottawa Walmart flyer collide on (merchant_id, name, valid_from)
+    -- and the last scrape silently overwrites the other.
+    postal_code           TEXT NOT NULL,
 
     name                  TEXT NOT NULL,              -- Item.name (cleaned)
     name_normalized       TEXT NOT NULL,              -- lowercased, whitespace-collapsed — dedup key, do not change
@@ -73,7 +82,9 @@ CREATE TABLE items (
 
     updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-    UNIQUE (merchant_id, name_normalized, valid_from)      -- dedup key, locked — do not change
+    -- Region-aware dedup key. postal_code discriminates the same
+    -- national merchant's regional flyers; the rest is the original key.
+    UNIQUE (merchant_id, postal_code, name_normalized, valid_from)
 );
 
 CREATE TRIGGER items_set_updated_at
@@ -85,6 +96,7 @@ CREATE INDEX idx_items_flyer_id        ON items(flyer_id);
 CREATE INDEX idx_items_category        ON items(category);
 CREATE INDEX idx_items_subcategory     ON items(subcategory);
 CREATE INDEX idx_items_valid_to        ON items(valid_to);
+CREATE INDEX idx_items_postal_code     ON items(postal_code);  -- every read filters by region
 CREATE INDEX idx_items_name_trgm       ON items USING gin (name gin_trgm_ops);  -- keyword search
 
 
@@ -135,6 +147,7 @@ SELECT
     i.size_unit,
     i.product_image,
     i.high_confidence,
+    i.postal_code,
     i.valid_from,
     i.valid_to,
     m.id   AS merchant_id,
@@ -144,12 +157,35 @@ JOIN merchants m ON m.id = i.merchant_id
 WHERE CURRENT_DATE BETWEEN i.valid_from AND i.valid_to;
 
 
+-- ── app profiles ────────────────────────────────────────────────────
+-- Lightweight local accounts (name + postal code + chosen merchants).
+-- NOT Supabase auth — the auth-dependent tables below stay reserved
+-- for a future real-auth migration. Created idempotently at API
+-- startup by db.users.ensure_user_tables(); kept here as documentation.
+-- user_merchants stores id AND name because a user can select a store
+-- we haven't scraped yet (no merchants row to join against).
+
+CREATE TABLE IF NOT EXISTS app_users (
+    id          SERIAL PRIMARY KEY,
+    name        TEXT NOT NULL UNIQUE,
+    postal_code TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS user_merchants (
+    user_id       INT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+    merchant_id   BIGINT NOT NULL,
+    merchant_name TEXT NOT NULL,
+    PRIMARY KEY (user_id, merchant_id)
+);
+
+
 -- ── auth-dependent tables ───────────────────────────────────────────
 -- Unaffected by the items rework above — unchanged from HANDOFF.md.
 
 CREATE TABLE user_preferences (
     user_id     UUID PRIMARY KEY REFERENCES auth.users(id),
-    postal_code TEXT NOT NULL DEFAULT 'K2G7A8',
+    postal_code TEXT,
     merchants   TEXT[],
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );

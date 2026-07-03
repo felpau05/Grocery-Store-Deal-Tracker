@@ -1,19 +1,30 @@
 @import "tailwindcss";
 
-@theme {
-  --color-paper: #faf6ee;
-  --color-ink: #1c1a16;
-  --color-ink-soft: #5b5648;
-  --color-sale: #d6402c;
-  --color-sale-dark: #a82f1f;
-  --color-produce: #2f5233;
-  --color-tag: #f2c14e;
-  --color-border-tan: #d9cdb0;
-  --color-card: #fffdf8;
+/* ── Design language: supermarket tabloid ────────────────────────────
+   Neo-brutalist grocery flyer: newsprint paper, heavy ink borders with
+   hard offset shadows (never blurred), sticker-yellow price gun labels,
+   tomato-red sale ink, one electric blue for interactive accents.
+   Everything slightly imperfect on purpose — tilted cards, stamped
+   badges, halftone dots — like a flyer pinned to a corkboard. */
 
-  --font-display: ui-sans-serif, system-ui, "Helvetica Neue", Arial, sans-serif;
-  --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+/* Palette: farmers-market green. Celery paper, forest ink, one vivid
+   market green doing the job red used to do, lime price stickers, and
+   a carrot orange reserved for keyboard focus. */
+@theme {
+  --color-paper: #edf2e0;
+  --color-ink: #14210f;
+  --color-ink-soft: #5d6e51;
+  --color-sale: #1f8f45;
+  --color-sale-dark: #14672c;
+  --color-produce: #1d5c3a;
+  --color-tag: #c6e14b;
+  --color-pop: #e0762b;
+  --color-border-tan: #b9c9a3;
+  --color-card: #f7faf0;
+
+  --font-display: var(--font-archivo), "Arial Black", "Helvetica Neue", sans-serif;
+  --font-body: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-spacemono), ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 body {
@@ -22,19 +33,114 @@ body {
   font-family: var(--font-body);
 }
 
+/* Display type is always shouted */
+.font-display {
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+}
+
+/* ── Brutalist primitives ────────────────────────────────────────────
+   .brut       — bordered block with a hard offset shadow
+   .btn-brut   — same, but pressing it physically pushes it into the page
+   .sticker    — a slapped-on label (yellow, tilted, bordered)
+   .stamp      — an inked rubber stamp outline
+   .halftone   — newsprint dot texture
+   .barcode    — decorative stripe code */
+
+.brut {
+  border: 2px solid var(--color-ink);
+  box-shadow: 4px 4px 0 var(--color-ink);
+  background-color: var(--color-card);
+}
+
+.brut-sm {
+  border: 2px solid var(--color-ink);
+  box-shadow: 3px 3px 0 var(--color-ink);
+  background-color: var(--color-card);
+}
+
+.btn-brut {
+  border: 2px solid var(--color-ink);
+  box-shadow: 3px 3px 0 var(--color-ink);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+.btn-brut:active:not(:disabled) {
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 var(--color-ink);
+}
+
+.sticker {
+  display: inline-block;
+  background-color: var(--color-tag);
+  border: 2px solid var(--color-ink);
+  box-shadow: 2px 2px 0 var(--color-ink);
+  transform: rotate(-2deg);
+  padding: 0.15rem 0.6rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.stamp {
+  display: inline-block;
+  border: 2px solid currentColor;
+  border-radius: 2px;
+  padding: 0.1rem 0.5rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  transform: rotate(-3deg);
+  opacity: 0.9;
+}
+
+.halftone {
+  background-image: radial-gradient(circle, rgba(20, 33, 15, 0.16) 1px, transparent 1.4px);
+  background-size: 9px 9px;
+}
+
+.barcode {
+  height: 26px;
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--color-ink) 0 2px,
+    transparent 2px 4px,
+    var(--color-ink) 4px 5px,
+    transparent 5px 9px,
+    var(--color-ink) 9px 12px,
+    transparent 12px 14px
+  );
+}
+
+/* Pinned-board tilt: alternate cards lean opposite ways, straighten on
+   hover — the flyer-on-a-corkboard effect. */
+.tilt-grid > *:nth-child(odd) {
+  transform: rotate(0.6deg);
+  transition: transform 0.2s ease;
+}
+.tilt-grid > *:nth-child(even) {
+  transform: rotate(-0.6deg);
+  transition: transform 0.2s ease;
+}
+.tilt-grid > *:hover {
+  transform: rotate(0deg);
+}
+
 /* Perforated tear-line, used under the search bar and between sections —
    a nod to tearing a coupon off a flyer page. */
 .tear-line {
-  background-image: radial-gradient(circle, var(--color-border-tan) 1.5px, transparent 1.6px);
+  background-image: radial-gradient(circle, var(--color-ink) 1.5px, transparent 1.6px);
   background-size: 10px 1px;
   background-repeat: repeat-x;
   background-position: center;
   height: 1px;
+  opacity: 0.45;
 }
 
 /* Visible keyboard focus, kept consistent across interactive elements */
 :focus-visible {
-  outline: 2px solid var(--color-sale);
+  outline: 3px solid var(--color-pop);
   outline-offset: 2px;
 }
 
@@ -59,8 +165,18 @@ body {
   100% { opacity: 1; transform: scale(1) rotate(-4deg); }
 }
 
+@keyframes shimmer {
+  0% { opacity: 0.5; }
+  50% { opacity: 1; }
+  100% { opacity: 0.5; }
+}
+
 .animate-in {
   animation: fade-in-up 0.4s ease-out backwards;
+}
+
+.animate-shimmer {
+  animation: shimmer 1.4s ease-in-out infinite backwards;
 }
 
 .animate-print {
@@ -77,7 +193,7 @@ body {
    bottom edge made of triangles in the card colour. */
 .receipt {
   position: relative;
-  filter: drop-shadow(2px 3px 0 rgba(28, 26, 22, 0.10));
+  filter: drop-shadow(4px 4px 0 var(--color-ink));
 }
 .receipt::after {
   content: "";
@@ -98,16 +214,7 @@ body {
 .leader {
   flex: 1;
   margin: 0 0.4rem 0.2rem;
-  border-bottom: 1px dotted var(--color-border-tan);
-}
-
-/* Ticker tape marquee — strip is duplicated in markup, so -50% loops. */
-@keyframes ticker {
-  from { transform: translateX(0); }
-  to   { transform: translateX(-50%); }
-}
-.ticker-track {
-  animation: ticker 38s linear infinite;
+  border-bottom: 2px dotted var(--color-border-tan);
 }
 
 /* Sheen sweep that crosses a card on hover, like light catching glossy
@@ -129,16 +236,121 @@ body {
   transform: translateX(130%);
 }
 
+/* ── Cart drawer / toasts ────────────────────────────────────────────
+   The slide-over panel, its backdrop, toast pop-ins, and the header
+   badge pulse when something lands in the cart. */
+
+@keyframes drawer-in {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes badge-pulse {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.4); }
+  100% { transform: scale(1); }
+}
+
+.animate-drawer {
+  animation: drawer-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+.animate-overlay {
+  animation: overlay-in 0.2s ease-out both;
+}
+
+.animate-toast {
+  animation: toast-in 0.25s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+.animate-badge-pulse {
+  animation: badge-pulse 0.4s ease-in-out;
+}
+
+/* ── Easter eggs ─────────────────────────────────────────────────────
+   Small hidden touches. None are load-bearing; all are killed under
+   prefers-reduced-motion. */
+
+/* The sticker wobbles when you reach for it directly — like nudging a
+   real price-gun label. Ends on the card-hover pose (-1deg, 1.03) so
+   there's no jump back to the group-hover transform when it finishes. */
+@keyframes tag-wobble {
+  0%   { transform: rotate(-3deg) scale(1); }
+  35%  { transform: rotate(-5deg) scale(1.01); }
+  70%  { transform: rotate(-1deg) scale(1.03); }
+  100% { transform: rotate(-1deg) scale(1.03); }
+}
+.price-tag:hover {
+  animation: tag-wobble 0.3s ease-in-out;
+}
+
+/* Fast-typing streak: the search input's border flashes sticker-yellow
+   when you hammer out 5+ characters inside a second. */
+@keyframes streak-flash {
+  0%, 100% { border-color: var(--color-ink); box-shadow: 3px 3px 0 var(--color-ink); }
+  50%      { border-color: var(--color-tag); box-shadow: 3px 3px 0 var(--color-tag); }
+}
+.search-streak {
+  animation: streak-flash 0.6s ease-in-out;
+}
+
+/* One-time shimmer sweep across the perforation on page load — a yellow
+   highlight passes over the dots left to right, like the receipt tearing. */
+@keyframes tear-sweep {
+  from { -webkit-mask-position: -100% center; mask-position: -100% center; }
+  to   { -webkit-mask-position: 200% center; mask-position: 200% center; }
+}
+.tear-shimmer {
+  position: relative;
+}
+.tear-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, var(--color-tag) 1.5px, transparent 1.6px);
+  background-size: 10px 1px;
+  background-repeat: repeat-x;
+  background-position: center;
+  -webkit-mask-image: linear-gradient(90deg, transparent 35%, black 50%, transparent 65%);
+  mask-image: linear-gradient(90deg, transparent 35%, black 50%, transparent 65%);
+  -webkit-mask-size: 300% 100%;
+  mask-size: 300% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  animation: tear-sweep 1.3s ease-in-out 0.4s 1 both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-in,
   .animate-print,
   .animate-stamp {
     animation: none;
   }
-  .ticker-track {
-    animation: none;
-  }
   .sheen {
     display: none;
+  }
+  .price-tag:hover,
+  .search-streak {
+    animation: none;
+  }
+  .tear-shimmer::after {
+    display: none;
+  }
+  /* Drawer/toast fade instead of slide; badge pulse off */
+  .animate-drawer {
+    animation: overlay-in 0.2s ease-out both;
+  }
+  .animate-badge-pulse {
+    animation: none;
   }
 }

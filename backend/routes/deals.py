@@ -8,8 +8,31 @@ from decimal import Decimal
 from fastapi import APIRouter, HTTPException, Query
 
 import db
+from config import Config
+from textutils import normalize_postal
 
 router = APIRouter(tags=["deals"])
+
+
+def _effective_scope(
+    postal_code: str | None,
+    merchant_id: int | None,
+    merchant_ids: list[int] | None,
+) -> tuple[str, int | None, list[int] | None]:
+    """Resolve (region, single-store, store-scope) for a deals request.
+
+    The scoping contract, identical across every deals endpoint:
+      - No postal code given  → the example-data region (DEFAULT_POSTAL_CODE).
+      - No store scope given   → the example-data merchants (DEFAULT_MERCHANTS).
+    A signed-in frontend always sends the account's own postal code +
+    stores, so those win; only the truly anonymous case hits the
+    defaults. A single `merchant_id` pill is passed through untouched
+    and is ANDed with the scope downstream.
+    """
+    postal = normalize_postal(postal_code) or Config.DEFAULT_POSTAL_CODE
+    if not merchant_ids and not merchant_id:
+        merchant_ids = sorted(Config.DEFAULT_MERCHANTS)
+    return postal, merchant_id, merchant_ids
 
 
 def _to_float(value) -> float | None:
@@ -81,21 +104,68 @@ def list_deals(
     category: str | None = None,
     subcategory: str | None = None,
     merchant_id: int | None = None,
+    merchant_ids: list[int] | None = Query(default=None, description="Restrict to these stores (a user's selection)"),
+    postal_code: str | None = Query(default=None, description="Region scope; defaults to the example area"),
     status: str = Query(default="active", pattern="^(active|upcoming|all)$"),
     sort: str = Query(default="price", pattern="^(price|price_per_unit)$"),
     sort_dir: str = Query(default="asc", pattern="^(asc|desc)$"),
     price_units: list[str] | None = Query(default=None),
+    expires_within_days: int | None = Query(default=None, ge=0, le=30),
+    price_min: float | None = Query(default=None, ge=0),
+    price_max: float | None = Query(default=None, ge=0),
     limit: int = Query(default=24, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ):
     valid_units = {"g", "ml", "each"}
     filtered_units = [u for u in (price_units or []) if u in valid_units] or None
+    postal, merchant_id, merchant_ids = _effective_scope(postal_code, merchant_id, merchant_ids)
+
     rows = db.search_items(
         q=q, category=category, subcategory=subcategory, merchant_id=merchant_id,
+        merchant_ids=merchant_ids, postal_code=postal,
         status=status, sort=sort, sort_dir=sort_dir,
-        price_units=filtered_units, limit=limit, offset=offset,
+        price_units=filtered_units,
+        expires_within_days=expires_within_days,
+        price_min=price_min, price_max=price_max,
+        limit=limit, offset=offset,
     )
     return [_serialize_deal(row) for row in rows]
+
+
+@router.get("/deals/facets")
+def deal_facets(
+    q: str | None = Query(default=None),
+    category: str | None = None,
+    merchant_id: int | None = None,
+    merchant_ids: list[int] | None = Query(default=None),
+    postal_code: str | None = Query(default=None),
+    status: str = Query(default="active", pattern="^(active|upcoming|all)$"),
+    price_units: list[str] | None = Query(default=None),
+    expires_within_days: int | None = Query(default=None, ge=0, le=30),
+    price_min: float | None = Query(default=None, ge=0),
+    price_max: float | None = Query(default=None, ge=0),
+):
+    """Item counts for the category/store pills, plus the exact total
+    matching every current filter (so the grid can page precisely
+    instead of guessing from a single page's length). Same region +
+    default-merchant scope as GET /deals — an anonymous/no-scope request
+    is scoped to the example area, not the whole table."""
+    valid_units = {"g", "ml", "each"}
+    filtered_units = [u for u in (price_units or []) if u in valid_units] or None
+    postal, merchant_id, merchant_ids = _effective_scope(postal_code, merchant_id, merchant_ids)
+
+    result = db.facet_counts(
+        q=q, category=category, merchant_id=merchant_id, merchant_ids=merchant_ids,
+        postal_code=postal,
+        status=status, price_units=filtered_units,
+        expires_within_days=expires_within_days,
+        price_min=price_min, price_max=price_max,
+    )
+    return {
+        "total": result["total"],
+        "categories": [{"name": k, "count": v} for k, v in result["categories"].items()],
+        "merchants": [{"id": k, "count": v} for k, v in result["merchants"].items()],
+    }
 
 
 @router.get("/deals/{item_id}/history")
@@ -140,12 +210,29 @@ def deal_history(item_id: int, days: int = Query(default=30, ge=1, le=365)):
 
 
 @router.get("/categories")
-def categories():
-    return db.list_categories()
+def categories(
+    merchant_id: int | None = None,
+    merchant_ids: list[int] | None = Query(default=None),
+    postal_code: str | None = Query(default=None),
+):
+    """Categories present in the caller's region + store scope — never the
+    whole database. Anonymous/no-scope requests fall back to the
+    example-data region and merchants, matching GET /deals."""
+    postal, merchant_id, merchant_ids = _effective_scope(postal_code, merchant_id, merchant_ids)
+    scope = [merchant_id] if merchant_id else merchant_ids
+    return db.list_categories(scope, postal_code=postal)
 
 
 @router.get("/merchants")
-def merchants():
-    """Merchants that currently have at least one item — backs the deals
-    page merchant filter."""
-    return db.list_merchants()
+def merchants(
+    merchant_id: int | None = None,
+    merchant_ids: list[int] | None = Query(default=None),
+    postal_code: str | None = Query(default=None),
+):
+    """Merchants with at least one item in the caller's region + store
+    scope — backs the deals page's anonymous/example-data store pills.
+    Signed-in users with their own stores selected don't need this
+    endpoint (their pill list comes from their saved selection)."""
+    postal, merchant_id, merchant_ids = _effective_scope(postal_code, merchant_id, merchant_ids)
+    scope = [merchant_id] if merchant_id else merchant_ids
+    return db.list_merchants(scope, postal_code=postal)

@@ -64,7 +64,7 @@ class Item:
             return self.price * self._price_unit_factor, self.price_unit
         
         # No size to divide by — price is just per item
-        if self.size is None or self.size_unit is None:
+        if self.size is None or self.size_unit is None or self.size == 0:
             return self.price, Unit.EACH
         
         return self.price / self.size, self.size_unit

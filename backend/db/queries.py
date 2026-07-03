@@ -3,11 +3,86 @@
 """
 
 import logging
-import re
+
+from textutils import variant_alternation
 
 from .connection import get_cursor
 
 logger = logging.getLogger("flippwatch.db.queries")
+
+
+def _shared_filter_clauses(
+    q: str | None,
+    status: str,
+    price_units: list[str] | None,
+    expires_within_days: int | None,
+    price_min: float | None,
+    price_max: float | None,
+    postal_code: str | None,
+) -> tuple[list[str], dict]:
+    """WHERE clauses common to search_items and facet_counts — everything
+    EXCEPT category/subcategory/merchant, since those are the dimensions
+    facet_counts computes counts *by* (and search_items' callers vary
+    them independently of this shared set).
+
+    `postal_code` is the region key: it lives here (not in the per-
+    dimension clauses) because EVERY read is region-scoped — a caller
+    only ever sees one region's data. Callers pass it already normalized.
+    """
+    clauses: list[str] = []
+    params: dict = {}
+
+    if postal_code:
+        clauses.append("postal_code = %(postal_code)s")
+        params["postal_code"] = postal_code
+
+    if status == "active":
+        clauses.append("valid_from <= CURRENT_DATE AND valid_to >= CURRENT_DATE")
+    elif status == "upcoming":
+        clauses.append("valid_from > CURRENT_DATE")
+    elif status != "all":
+        raise ValueError(f"Unknown status {status!r} — use 'active', 'upcoming', or 'all'")
+
+    if q:
+        # Word-boundary match per token: \m/\M are Postgres word anchors.
+        # "beef" won't match "Beefsteak"; "chicken breast" requires both
+        # words. Each token also matches its singular/plural variants
+        # ("banana" finds "Bananas"), and brands count as searchable text
+        # ("nutella" finds items branded Nutella even if the name omits it).
+        for i, word in enumerate(q.split()):
+            clauses.append(
+                f"(name ~* %(qw_{i})s OR array_to_string(brands, ' ') ~* %(qw_{i})s)"
+            )
+            params[f"qw_{i}"] = rf"\m({variant_alternation(word)})\M"
+
+    if price_units:
+        placeholders = ", ".join(f"%(pu_{i})s" for i in range(len(price_units)))
+        clauses.append(f"price_unit IN ({placeholders})")
+        for i, u in enumerate(price_units):
+            params[f"pu_{i}"] = u
+
+    if expires_within_days is not None:
+        # Ends within N days and hasn't already expired (0 = ends today).
+        clauses.append(
+            "valid_to >= CURRENT_DATE AND valid_to <= CURRENT_DATE + %(exp_days)s"
+        )
+        params["exp_days"] = expires_within_days
+
+    if price_min is not None:
+        clauses.append("price >= %(price_min)s")
+        params["price_min"] = price_min
+
+    if price_max is not None:
+        clauses.append("price <= %(price_max)s")
+        params["price_max"] = price_max
+
+    return clauses, params
+
+
+def _merchant_in_clause(merchant_ids: list[int], param_prefix: str) -> tuple[str, dict]:
+    placeholders = ", ".join(f"%({param_prefix}_{i})s" for i in range(len(merchant_ids)))
+    params = {f"{param_prefix}_{i}": mid for i, mid in enumerate(merchant_ids)}
+    return f"merchant_id IN ({placeholders})", params
 
 
 def search_items(
@@ -15,22 +90,28 @@ def search_items(
     category: str | None = None,
     subcategory: str | None = None,
     merchant_id: int | None = None,
+    merchant_ids: list[int] | None = None,  # a user's chosen stores — ANDed with merchant_id
+    postal_code: str | None = None,  # region key — every caller should scope this
     status: str = "active",       # "active" | "upcoming" | "all"
     sort: str = "price",          # "price" | "price_per_unit"
     sort_dir: str = "asc",        # "asc" | "desc"
     price_units: list[str] | None = None,  # ["g", "ml", "each"] — None means all
+    expires_within_days: int | None = None,  # only deals ending within N days (0 = today)
+    price_min: float | None = None,
+    price_max: float | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[dict]:
-    """Search active_deals by keyword / category / merchant.
+    """Search active_deals by keyword / category / merchant / region.
 
-    Backs GET /deals. `status="active"` (default) only returns deals
-    whose flyer window covers today; "upcoming" returns future-dated
-    ones; "all" applies no date filter. `limit`/`offset` page the
-    results — the ORDER BY includes item_id as a tiebreaker so paging
-    is stable (rows don't shuffle between pages on equal valid_to).
+    Backs GET /deals. `postal_code` scopes to one region — routes always
+    supply it (a signed-in user's own, or the example-data default), so
+    two regions of the same national merchant never bleed together.
+    `status="active"` (default) only returns deals whose flyer window
+    covers today; "upcoming" returns future-dated ones; "all" applies no
+    date filter. `limit`/`offset` page the results — the ORDER BY
+    includes item_id as a tiebreaker so paging is stable.
     """
-    clauses: list[str] = []
     if sort not in ("price", "price_per_unit"):
         raise ValueError(f"Unknown sort {sort!r}")
     if sort_dir not in ("asc", "desc"):
@@ -50,21 +131,11 @@ def search_items(
     )
     order_by = f"{sort_expr} {sort_dir.upper()}, item_id ASC"
 
-    params: dict = {"limit": limit, "offset": offset}
-
-    if status == "active":
-        clauses.append("valid_from <= CURRENT_DATE AND valid_to >= CURRENT_DATE")
-    elif status == "upcoming":
-        clauses.append("valid_from > CURRENT_DATE")
-    elif status != "all":
-        raise ValueError(f"Unknown status {status!r} — use 'active', 'upcoming', or 'all'")
-
-    if q:
-        # Word-boundary match per token: \m/\M are Postgres word anchors.
-        # "beef" won't match "Beefsteak"; "chicken breast" requires both words.
-        for i, word in enumerate(q.split()):
-            clauses.append(f"name ~* %(qw_{i})s")
-            params[f"qw_{i}"] = rf"\m{re.escape(word)}\M"
+    clauses, params = _shared_filter_clauses(
+        q, status, price_units, expires_within_days, price_min, price_max, postal_code,
+    )
+    params["limit"] = limit
+    params["offset"] = offset
 
     if category:
         clauses.append("category = %(category)s")
@@ -78,11 +149,10 @@ def search_items(
         clauses.append("merchant_id = %(merchant_id)s")
         params["merchant_id"] = merchant_id
 
-    if price_units:
-        placeholders = ", ".join(f"%(pu_{i})s" for i in range(len(price_units)))
-        clauses.append(f"price_unit IN ({placeholders})")
-        for i, u in enumerate(price_units):
-            params[f"pu_{i}"] = u
+    if merchant_ids:
+        clause, mparams = _merchant_in_clause(merchant_ids, "mid")
+        clauses.append(clause)
+        params.update(mparams)
 
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
 
@@ -100,6 +170,91 @@ def search_items(
             params,
         )
         return cur.fetchall()
+
+
+def facet_counts(
+    q: str | None = None,
+    category: str | None = None,
+    merchant_id: int | None = None,
+    merchant_ids: list[int] | None = None,
+    postal_code: str | None = None,
+    status: str = "active",
+    price_units: list[str] | None = None,
+    expires_within_days: int | None = None,
+    price_min: float | None = None,
+    price_max: float | None = None,
+) -> dict:
+    """Item counts for the deals page's category/store pills, plus the
+    exact total for the current filters (used for real pagination).
+
+    Standard faceted-search rule: a dimension's own counts ignore its own
+    current selection (so category counts show what EVERY category would
+    yield, not just the selected one) but respect every other active
+    filter — store counts still reflect the current category, and
+    category counts still reflect the current single-store pill
+    (merchant_id) if one is selected. Store counts are always computed
+    across the full `merchant_ids` scope (the user's stores, or the
+    default set) regardless of which single pill is active, so switching
+    stores shows the other stores' true counts.
+    """
+    shared_clauses, shared_params = _shared_filter_clauses(
+        q, status, price_units, expires_within_days, price_min, price_max, postal_code,
+    )
+
+    # Effective store restriction for category counts + total: the single
+    # selected pill wins over the full scope, exactly like search_items.
+    store_clause, store_params = None, {}
+    if merchant_id:
+        store_clause, store_params = "merchant_id = %(fc_merchant_id)s", {"fc_merchant_id": merchant_id}
+    elif merchant_ids:
+        store_clause, store_params = _merchant_in_clause(merchant_ids, "fc_mid")
+
+    def _where(*extra: str) -> str:
+        parts = [*shared_clauses, *extra]
+        return f"WHERE {' AND '.join(parts)}" if parts else ""
+
+    with get_cursor() as cur:
+        # Total — every active filter applied, matches search_items exactly.
+        total_extra = [store_clause] if store_clause else []
+        if category:
+            total_extra.append("category = %(fc_category)s")
+        cur.execute(
+            f"SELECT count(*) AS n FROM active_deals {_where(*total_extra)}",
+            {**shared_params, **store_params, "fc_category": category},
+        )
+        total = cur.fetchone()["n"]
+
+        # Per-category counts — store-scoped, but ignore the category filter.
+        cat_extra = [store_clause, "category IS NOT NULL"] if store_clause else ["category IS NOT NULL"]
+        cur.execute(
+            f"""
+            SELECT category, count(*) AS n FROM active_deals
+            {_where(*cat_extra)}
+            GROUP BY category
+            """,
+            {**shared_params, **store_params},
+        )
+        categories = {row["category"]: row["n"] for row in cur.fetchall()}
+
+        # Per-store counts — always across the full scope (never narrowed
+        # to a single selected pill), but respect the category filter.
+        scope_clause, scope_params = None, {}
+        if merchant_ids:
+            scope_clause, scope_params = _merchant_in_clause(merchant_ids, "fc_scope")
+        merch_extra = [scope_clause] if scope_clause else []
+        if category:
+            merch_extra.append("category = %(fc_category)s")
+        cur.execute(
+            f"""
+            SELECT merchant_id, count(*) AS n FROM active_deals
+            {_where(*merch_extra)}
+            GROUP BY merchant_id
+            """,
+            {**shared_params, **scope_params, "fc_category": category},
+        )
+        merchants = {row["merchant_id"]: row["n"] for row in cur.fetchall()}
+
+    return {"total": total, "categories": categories, "merchants": merchants}
 
 
 def get_item(item_id: int) -> dict | None:
@@ -139,29 +294,61 @@ def get_price_history(item_id: int, days: int = 30) -> list[dict]:
         return cur.fetchall()
 
 
-def list_categories() -> list[str]:
-    """Distinct non-empty categories currently in use. Backs GET /categories."""
+def list_categories(
+    merchant_ids: list[int] | None = None,
+    postal_code: str | None = None,
+) -> list[str]:
+    """Distinct non-empty categories in use within the caller's scope
+    (region + stores). Backs GET /categories.
+
+    Both filters matter: without `postal_code` this leaks categories
+    from every region ever scraped; without `merchant_ids` it leaks
+    other stores in the same region. Routes always supply both."""
+    conds = ["category IS NOT NULL", "category != ''"]
+    params: dict = {}
+    if postal_code:
+        conds.append("postal_code = %(postal)s")
+        params["postal"] = postal_code
+    if merchant_ids:
+        conds.append("merchant_id = ANY(%(mids)s)")
+        params["mids"] = list(merchant_ids)
     with get_cursor() as cur:
         cur.execute(
-            """
-            SELECT DISTINCT category FROM items
-            WHERE category IS NOT NULL AND category != ''
-            ORDER BY category
-            """
+            f"SELECT DISTINCT category FROM items WHERE {' AND '.join(conds)} ORDER BY category",
+            params,
         )
         return [row["category"] for row in cur.fetchall()]
 
 
-def list_merchants() -> list[dict]:
-    """Merchants that currently have at least one item, id + name.
-    Backs GET /merchants (the deals page merchant filter)."""
+def list_merchants(
+    merchant_ids: list[int] | None = None,
+    postal_code: str | None = None,
+) -> list[dict]:
+    """Merchants with at least one item in the caller's scope (region +
+    stores), id + name. Backs GET /merchants.
+
+    Region-scoped via an EXISTS on items so a merchant only appears if
+    it actually has data for THIS postal code — otherwise a store
+    scraped for another region would surface with zero local deals."""
+    item_conds = ["i.merchant_id = m.id"]
+    params: dict = {}
+    if postal_code:
+        item_conds.append("i.postal_code = %(postal)s")
+        params["postal"] = postal_code
+    merch_cond = ""
+    if merchant_ids:
+        merch_cond = "m.id = ANY(%(mids)s) AND "
+        params["mids"] = list(merchant_ids)
     with get_cursor() as cur:
         cur.execute(
-            """
+            f"""
             SELECT m.id, m.name
             FROM merchants m
-            WHERE EXISTS (SELECT 1 FROM items i WHERE i.merchant_id = m.id)
+            WHERE {merch_cond}EXISTS (
+                SELECT 1 FROM items i WHERE {' AND '.join(item_conds)}
+            )
             ORDER BY m.name
-            """
+            """,
+            params,
         )
         return cur.fetchall()
