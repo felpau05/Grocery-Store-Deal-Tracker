@@ -37,6 +37,7 @@ logs/
 # OS files
 .DS_Store
 Thumbs.db
+*:Zone.Identifier
 
 # VS Code
 .vscode/*
@@ -51,6 +52,10 @@ yarn-error.log*
 pnpm-debug.log*
 dist/
 build/
+
+# Next.js build output
+.next/
+frontend/.next/
 
 # Docker/local override files
 docker-compose.override.yml
