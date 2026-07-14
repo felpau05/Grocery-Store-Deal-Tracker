@@ -21,18 +21,19 @@ There is intentionally no way to list or read other accounts.
 import datetime
 import logging
 import re
+import secrets
 from urllib.parse import urlencode
 
 import bcrypt
 import httpx
 import jwt
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr, Field
 
 import db
 from config import Config
-from flipp_scraper.service import run_background_scrape, scrape_running, scrape_status_for
+from scraper_client import scrape_status_for, start_scrape
 
 logger = logging.getLogger("flippwatch.routes.auth")
 
@@ -159,6 +160,11 @@ def google_login():
             detail="Google sign-in isn't configured yet — set GOOGLE_CLIENT_ID "
                    "and GOOGLE_CLIENT_SECRET in .env",
         )
+    # CSRF protection: bind this flow to the caller's browser via a
+    # random state echoed back on the callback and matched against an
+    # HttpOnly cookie — prevents OAuth login-CSRF (attacker forcing a
+    # victim onto the attacker's account).
+    state = secrets.token_urlsafe(24)
     params = urlencode(
         {
             "client_id": Config.GOOGLE_CLIENT_ID,
@@ -166,15 +172,32 @@ def google_login():
             "response_type": "code",
             "scope": "openid email profile",
             "prompt": "select_account",
+            "state": state,
         }
     )
-    return RedirectResponse(f"{_GOOGLE_AUTH_URL}?{params}")
+    resp = RedirectResponse(f"{_GOOGLE_AUTH_URL}?{params}")
+    resp.set_cookie(
+        "oauth_state",
+        state,
+        max_age=600,
+        httponly=True,
+        secure=Config.APP_ENV != "development",
+        samesite="lax",
+    )
+    return resp
 
 
 @router.get("/auth/google/callback")
-async def google_callback(code: str = Query(...)):
+async def google_callback(
+    code: str = Query(...),
+    state: str = Query(default=""),
+    oauth_state: str | None = Cookie(default=None),
+):
     if not _google_configured():
         raise HTTPException(status_code=503, detail="Google sign-in isn't configured yet")
+
+    if not oauth_state or not state or not secrets.compare_digest(state, oauth_state):
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
 
     async with httpx.AsyncClient(timeout=15) as client:
         token_res = await client.post(
@@ -204,6 +227,14 @@ async def google_callback(code: str = Query(...)):
     email = info.get("email")
     name = info.get("name") or (email.split("@")[0] if email else "Shopper")
     if not google_sub or not email:
+        return RedirectResponse(f"{Config.FRONTEND_URL}/login#error=google")
+
+    # Only trust the email if Google says it's verified. Without this, a
+    # Google account carrying an unverified address matching a victim's
+    # would be silently linked to (or auto-create) that account below —
+    # an account-takeover path. userinfo returns email_verified as a bool
+    # or the string "true".
+    if info.get("email_verified") not in (True, "true"):
         return RedirectResponse(f"{Config.FRONTEND_URL}/login#error=google")
 
     user = db.get_user_by_google_sub(google_sub)
@@ -236,7 +267,6 @@ def me(user: dict = Depends(get_current_user)):
 @router.put("/me/preferences")
 def update_preferences(
     body: PreferencesRequest,
-    background: BackgroundTasks,
     user: dict = Depends(get_current_user),
 ):
     postal = _normalize_postal(body.postal_code) if body.postal_code else None
@@ -255,7 +285,9 @@ def update_preferences(
 
     # Kick off a scrape when the saved prefs need data we don't have:
     # a different postal code, or newly selected stores that were never
-    # scraped. Runs in the background — the save itself returns instantly.
+    # scraped. start_scrape() posts to scraper-go and returns immediately
+    # — the scrape itself runs out-of-process, so the save still returns
+    # instantly.
     scrape_postal = updated.get("postal_code")
     selection = {m["id"] for m in updated.get("merchants", [])}
     postal_changed = postal is not None and postal != user.get("postal_code")
@@ -270,9 +302,12 @@ def update_preferences(
     new_stores = selection - tracked
 
     scrape_started = False
-    if scrape_postal and selection and (postal_changed or new_stores) and not scrape_running():
-        background.add_task(run_background_scrape, scrape_postal, selection)
-        scrape_started = True
+    if scrape_postal and selection and (postal_changed or new_stores):
+        # start_scrape() itself reports False on a 409 (already running)
+        # or if scraper-go is unreachable — no separate "is one already
+        # running" pre-check needed, and no TOCTOU race, since scraper-go's
+        # single-flight guard is atomic server-side.
+        scrape_started = start_scrape(scrape_postal, selection)
 
     return {**_public(updated), "scrape_started": scrape_started}
 

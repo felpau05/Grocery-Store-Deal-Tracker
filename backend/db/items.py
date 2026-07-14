@@ -1,12 +1,13 @@
-"""Writes for items + price_history (+ classifier cache writes).
+"""Writes for item classification + the classifier cache. Item/
+price_history writes themselves now live in scraper-go (see the
+scraper-go repo's db.go) — scraping moved out of this process; this
+module keeps only what's still written from Python.
+
 Reads live in queries.py — nothing in this file does a SELECT for the
-caller; upsert_item's RETURNING id is plumbing, not a query.
+caller.
 """
 
 import logging
-import re
-
-from models import Item
 
 from .connection import get_cursor
 from .guard import graceful_write
@@ -14,105 +15,27 @@ from .guard import graceful_write
 logger = logging.getLogger("flippwatch.db.items")
 
 
-def normalize_name(name: str) -> str:
-    """Lowercase + whitespace-collapse.
-
-    Part of the items dedup key (merchant_id, name_normalized, valid_from)
-    — locked, do not change without re-reading HANDOFF.md.
-    """
-    return re.sub(r"\s+", " ", name.lower()).strip()
-
-
 @graceful_write
-def upsert_item(item: Item, postal_code: str) -> int:
-    """Insert or update one item, then always append a price_history row.
-
-    Returns the item's database id (BIGSERIAL, not Flipp's own item id).
-
-    `postal_code` is the region the item was scraped for (already
-    normalized by the caller) — part of the dedup key so the same
-    national merchant's regional flyers don't overwrite each other.
-
-    merchant_id and flyer_id come from item.meta_data — the Merchant/raw
-    dict passed through the pipeline — so callers don't have to thread
-    them through separately and risk a mismatch.
-
-    price_history is append-only: even when the item row itself is
-    unchanged (re-scraping the same flyer before it expires), a new
-    price_history row is still inserted. That's what makes the 30-day
-    chart show one point per scrape instead of collapsing flat periods.
-    """
-    name_normalized = normalize_name(item.name)
-
+def apply_classifications(updates: list[tuple[int, str, str]]) -> None:
+    """Batch-write (aisle, department) classifier results back onto
+    `items` by id. One statement for the whole batch, same batching
+    principle as scraper-go's item upsert — updates is
+    [(item_id, subcategory, category), ...]."""
+    if not updates:
+        return
     with get_cursor() as cur:
         cur.execute(
             """
-            INSERT INTO items (
-                merchant_id, flyer_id, flipp_item_id, postal_code, name, name_normalized,
-                original_name, original_description, brands,
-                price, price_unit, price_unit_factor,
-                size, size_unit, product_image, cutout_image,
-                category, subcategory, high_confidence, valid_from, valid_to
-            ) VALUES (
-                %(merchant_id)s, %(flyer_id)s, %(flipp_item_id)s, %(postal_code)s, %(name)s, %(name_normalized)s,
-                %(original_name)s, %(original_description)s, %(brands)s,
-                %(price)s, %(price_unit)s, %(price_unit_factor)s,
-                %(size)s, %(size_unit)s, %(product_image)s, %(cutout_image)s,
-                %(category)s, %(subcategory)s, %(high_confidence)s, %(valid_from)s, %(valid_to)s
-            )
-            ON CONFLICT (merchant_id, postal_code, name_normalized, valid_from) DO UPDATE SET
-                flyer_id = EXCLUDED.flyer_id,
-                flipp_item_id = EXCLUDED.flipp_item_id,
-                name = EXCLUDED.name,
-                original_name = EXCLUDED.original_name,
-                original_description = EXCLUDED.original_description,
-                brands = EXCLUDED.brands,
-                price = EXCLUDED.price,
-                price_unit = EXCLUDED.price_unit,
-                price_unit_factor = EXCLUDED.price_unit_factor,
-                size = EXCLUDED.size,
-                size_unit = EXCLUDED.size_unit,
-                product_image = EXCLUDED.product_image,
-                cutout_image = EXCLUDED.cutout_image,
-                category = EXCLUDED.category,
-                subcategory = EXCLUDED.subcategory,
-                high_confidence = EXCLUDED.high_confidence,
-                valid_to = EXCLUDED.valid_to,
-                updated_at = now()
-            RETURNING id
+            UPDATE items SET subcategory = v.subcategory, category = v.category
+            FROM (SELECT * FROM UNNEST(%s::bigint[], %s::text[], %s::text[]) AS t(id, subcategory, category)) v
+            WHERE items.id = v.id
             """,
-            {
-                "merchant_id": item.meta_data.merchant_id,
-                "flyer_id": item.meta_data.flyer_id,
-                "flipp_item_id": item.meta_data.item_id or None,
-                "postal_code": postal_code,
-                "name": item.name,
-                "name_normalized": name_normalized,
-                "original_name": item.meta_data.original_name or None,
-                "original_description": item.meta_data.original_desc or None,
-                "brands": list(item.brands),
-                "price": item.price,
-                "price_unit": item.price_unit.value,
-                "price_unit_factor": item._price_unit_factor,
-                "size": item.size,
-                "size_unit": item.size_unit.value if item.size_unit else None,
-                "product_image": item.product_image or None,
-                "cutout_image": item.cutout_image or None,
-                "category": item.category or None,
-                "subcategory": item.subcategory or None,
-                "high_confidence": item.high_confidence,
-                "valid_from": item.start_date,
-                "valid_to": item.end_date,
-            },
+            (
+                [u[0] for u in updates],
+                [u[1] for u in updates],
+                [u[2] for u in updates],
+            ),
         )
-        item_id = cur.fetchone()["id"]
-
-        cur.execute(
-            "INSERT INTO price_history (item_id, merchant_id, price) VALUES (%s, %s, %s)",
-            (item_id, item.meta_data.merchant_id, item.price),
-        )
-
-    return item_id
 
 
 @graceful_write

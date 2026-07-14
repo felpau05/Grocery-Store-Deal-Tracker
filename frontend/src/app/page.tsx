@@ -512,13 +512,14 @@ function HomeInner() {
         {!sessionLoading && !user && (
           <div className="brut bg-tag/30 px-4 py-3 mb-6 flex items-center justify-between gap-4 flex-wrap">
             <p className="text-[13px] text-ink">
-              <span className="font-mono font-bold uppercase tracking-[0.1em] mr-2">Example data</span>
+              <span className="font-mono font-bold uppercase tracking-[0.1em] mr-5">
               You&apos;re seeing deals for {meta?.default_postal_code ? (
-                <span className="font-mono font-bold">{meta.default_postal_code}</span>
+                <span className="font-mono font-bold">{meta.default_postal_code}.</span>
               ) : (
                 "our default area"
-              )}{" "}
-              — sign up to set your own postal code and stores.
+              )}
+              </span>
+              {"Sign up to see the latest deals near you."}
             </p>
             <Link
               href="/login"

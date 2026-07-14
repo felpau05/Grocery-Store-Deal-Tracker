@@ -24,3 +24,7 @@ npm run dev
 
 Run Scraper:
 python -m flipp_scraper.run --output results.json
+
+
+Docker Image
+docker compose up --build --scale backend=3 --scale scraper-go=1

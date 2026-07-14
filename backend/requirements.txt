@@ -10,6 +10,9 @@ APScheduler==3.10.4
 # Database
 psycopg2-binary==2.9.9
 
+# Redis (shared job/scrape-state cache with scraper-go)
+redis==8.0.1
+
 # API
 fastapi==0.111.0
 uvicorn[standard]==0.30.1

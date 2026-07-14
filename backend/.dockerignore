@@ -1,0 +1,9 @@
+venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+test_outputs/
+training_data/
+classifier/model_fasttext.bin
+.env
+.git

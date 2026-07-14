@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import db
+from classifier.backfill import start_backfill_scheduler, stop_backfill_scheduler
 from config import Config
 from routes import auth, deals, optimize, users
 
@@ -15,7 +16,12 @@ from routes import auth, deals, optimize, users
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.ensure_user_tables()
+    # Classifies items scraper-go wrote with category still NULL — see
+    # classifier/backfill.py for why this is async/decoupled rather
+    # than inline in the scrape.
+    start_backfill_scheduler()
     yield
+    stop_backfill_scheduler()
 
 
 app = FastAPI(title="flippwatch API", lifespan=lifespan)

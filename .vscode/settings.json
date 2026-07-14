@@ -1,3 +1,7 @@
 {
-    "python.defaultInterpreterPath": "${workspaceFolder}/backend/venv/bin/python"
+    "python.defaultInterpreterPath": "${workspaceFolder}/backend/venv/bin/python",
+    "go.goroot": "/home/felpau/sdk/go",
+    "go.alternateTools": {
+        "go": "/home/felpau/sdk/go/bin/go"
+    }
 }

@@ -352,3 +352,15 @@ def list_merchants(
             params,
         )
         return cur.fetchall()
+
+
+def unclassified_items(limit: int) -> list[dict]:
+    """Items scraper-go wrote with category still NULL — the backfill
+    queue classifier/backfill.py sweeps on a timer. Scoped to `id` /
+    `name_normalized` only, the classifier's sole input."""
+    with get_cursor() as cur:
+        cur.execute(
+            "SELECT id, name_normalized FROM items WHERE category IS NULL LIMIT %s",
+            (limit,),
+        )
+        return cur.fetchall()

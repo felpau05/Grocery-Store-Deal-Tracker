@@ -45,8 +45,8 @@ export default function SiteHeader() {
     <header className="sticky top-0 z-20 bg-paper/90 backdrop-blur-sm border-b-2 border-ink">
       <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
         <Link href="/" className="group flex items-center">
-          <span className="sticker text-[13px] text-ink group-hover:rotate-0 transition-transform">
-            flippwatch<span className="text-sale">*</span>
+          <span className="sticker text-[20px] text-ink group-hover:rotate-0 transition-transform">
+            LOCAL GROCERY STORE DEALS<span className="text-sale">!</span>
           </span>
         </Link>
 

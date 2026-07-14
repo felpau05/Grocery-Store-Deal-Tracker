@@ -2,16 +2,24 @@
 
 Module boundaries (locked, see HANDOFF.md):
     connection.py   get_conn / get_cursor only
-    stores.py       writes for stores + flyers
-    items.py        writes for items + price_history (+ classifier cache writes)
+    items.py        item classification writes (+ classifier cache writes) —
+                     item/price_history/merchant/flyer writes live in
+                     scraper-go now, not here
     queries.py      all reads
 """
 
 from .connection import get_conn, get_cursor
-from .items import normalize_name, upsert_item, upsert_item_embedding
-from .queries import facet_counts, get_item, get_price_history, list_categories, list_merchants, search_items
+from .items import apply_classifications, upsert_item_embedding
+from .queries import (
+    facet_counts,
+    get_item,
+    get_price_history,
+    list_categories,
+    list_merchants,
+    search_items,
+    unclassified_items,
+)
 from .guard import clear_storage_error, storage_status
-from .stores import upsert_flyer, upsert_merchant
 from .users import (
     create_user,
     ensure_user_tables,
@@ -25,10 +33,8 @@ from .users import (
 __all__ = [
     "get_conn",
     "get_cursor",
-    "upsert_merchant",
-    "upsert_flyer",
-    "upsert_item",
-    "normalize_name",
+    "apply_classifications",
+    "unclassified_items",
     "upsert_item_embedding",
     "search_items",
     "facet_counts",

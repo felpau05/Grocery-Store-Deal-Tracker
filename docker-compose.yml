@@ -1,0 +1,68 @@
+# Local dev orchestration for the backend + scraper-go + their shared
+# Redis — run `docker compose up --build`. The frontend is deliberately
+# NOT included here: Next.js's dev server (fast refresh) works better
+# run natively (`npm run dev` in frontend/), and it already defaults to
+# hitting http://localhost:8000 for the API, which the proxy exposes.
+#
+# DATABASE_URL still points at real Supabase either way (there's no
+# local Postgres here) — only Redis and the app services run in
+# containers. This Redis is separate from any Redis you might already
+# be running on the host (e.g. via systemd) — the two don't share
+# data, so don't mix "some services via compose, others run natively"
+# in the same session or they'll end up talking to different Redis
+# instances.
+#
+# Horizontal scaling: neither `backend` nor `scraper-go` binds a host
+# port directly (that would conflict the moment you run more than one
+# replica) — `proxy` is the single host-facing entry point for both,
+# and load-balances across however many replicas exist via
+# proxy/Caddyfile's `dynamic a` upstream (re-resolves Docker's internal
+# DNS for the service name on a timer, rather than resolving once).
+# Try it: `docker compose up --build --scale backend=3 --scale scraper-go=2`
+# — this is the same single-flight/job-state correctness the Redis
+# migration was for, now actually exercised with real replicas instead
+# of manually-started processes on different ports.
+services:
+  redis:
+    image: redis:7-alpine
+    # No host port mapping — only scraper-go/backend (both in this
+    # compose network) need to reach it, by service name.
+
+  scraper-go:
+    build:
+      context: ./scraper-go
+    env_file:
+      - ./scraper-go/.env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      LISTEN_ADDR: :8080
+    depends_on:
+      - redis
+
+  backend:
+    build:
+      context: ./backend
+    env_file:
+      - ./.env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      # Through the proxy, not scraper-go directly — see the proxy
+      # comment above for why (bare Docker DNS round-robin isn't
+      # reliable enough for this, especially with connection reuse).
+      SCRAPER_SERVICE_URL: http://proxy:8080
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - redis
+      - scraper-go
+
+  proxy:
+    image: caddy:2
+    volumes:
+      - ./proxy/Caddyfile:/etc/caddy/Caddyfile
+    ports:
+      - "8000:8000"
+      - "8080:8080"
+    depends_on:
+      - backend
+      - scraper-go

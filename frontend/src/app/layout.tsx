@@ -25,10 +25,12 @@ const spaceMono = Space_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "flippwatch — this week's grocery deals",
+  title: "Grocery Store Deals",
   description:
     "Live deals pulled from local grocery flyers — sorted, normalized, and priced per unit so you can actually compare.",
-  icons: { icon: "/favicon.svg" },
+  icons: {
+    icon: [{ url: "/watermelon_1.svg", type: "image/svg+xml" }],
+  },
   openGraph: {
     title: "flippwatch",
     description:

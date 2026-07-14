@@ -1,0 +1,25 @@
+{
+	admin off
+}
+
+# `dynamic a <service> <port>` re-resolves Docker Compose's internal DNS
+# for the service name every `refresh` interval, picking up however
+# many replica IPs currently exist (docker compose up --scale backend=N)
+# and round-robining across them — a bare `reverse_proxy backend:8000`
+# would instead resolve once and stick to a single container.
+
+:8000 {
+	reverse_proxy {
+		dynamic a backend 8000 {
+			refresh 5s
+		}
+	}
+}
+
+:8080 {
+	reverse_proxy {
+		dynamic a scraper-go 8080 {
+			refresh 5s
+		}
+	}
+}
