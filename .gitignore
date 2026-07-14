@@ -72,3 +72,7 @@ backend/test_outputs/
 backend/training_data/
 backend/classifier/model*.bin
 backend/classifier/model*.joblib
+
+# Markdown files (except README)
+*.md
+!README.md
