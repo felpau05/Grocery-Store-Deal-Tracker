@@ -66,5 +66,9 @@ temp/
 *.tmp
 
 # Testing Stuff
-
 backend/test_outputs/
+
+# Large ML models and training data (>100MB, excluded from git)
+backend/training_data/
+backend/classifier/model*.bin
+backend/classifier/model*.joblib

@@ -104,7 +104,7 @@ def _normalize_postal(raw: str) -> str:
     if not _POSTAL_RE.match(code):
         raise HTTPException(
             status_code=422,
-            detail=f"{raw!r} is not a valid Canadian postal code (e.g. A1A 1A1)",
+            detail=f"{raw!r} is not a valid Canadian postal code",
         )
     return code
 

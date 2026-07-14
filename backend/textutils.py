@@ -41,7 +41,7 @@ def variant_alternation(word: str) -> str:
 
 def normalize_postal(raw: str | None) -> str | None:
     """Canonical postal-code form for storage/lookup: uppercase, no
-    spaces or dashes. "k2g 7a8" → "K2G7A8". Returns None for empty input.
+    spaces or dashes. Returns None for empty input.
 
     Deliberately does NOT validate format — that's the routes' job
     (they 422 on bad input). This only canonicalizes so the region key

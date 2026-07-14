@@ -150,7 +150,7 @@ func TestNormalizeName(t *testing.T) {
 func TestRunPipelineDropsNoPrice(t *testing.T) {
 	raw := RawItem{"name": "No Price Item", "merchant_id": float64(1), "flyer_id": float64(1)}
 	merchant := Merchant{ID: 1, Name: "Test Store"}
-	if item := runPipeline(raw, merchant, "K1A0A1"); item != nil {
+	if item := runPipeline(raw, merchant, "postal_code"); item != nil {
 		t.Fatalf("expected nil item for missing price, got %+v", item)
 	}
 }
@@ -162,7 +162,7 @@ func TestRunPipelineBasic(t *testing.T) {
 		"valid_from": "2024-01-01", "valid_to": "2024-01-07",
 	}
 	merchant := Merchant{ID: 1, Name: "Test Store"}
-	item := runPipeline(raw, merchant, "K1A0A1")
+	item := runPipeline(raw, merchant, "postal_code")
 	if item == nil {
 		t.Fatal("expected a parsed item, got nil")
 	}

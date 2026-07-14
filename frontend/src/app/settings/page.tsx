@@ -32,7 +32,7 @@ export default function SettingsPage() {
 
   async function findStores(code: string) {
     if (!POSTAL_RE.test(code.trim())) {
-      setStoresError("That doesn't look like a Canadian postal code (e.g. A1A 1A1).");
+      setStoresError("That doesn't look like a Canadian postal code.");
       return;
     }
     setStoresLoading(true);
@@ -96,7 +96,7 @@ export default function SettingsPage() {
     // user hears exactly why nothing was saved.
     const trimmed = postal.trim();
     if (trimmed && !POSTAL_RE.test(trimmed)) {
-      setStoresError("Nothing saved — that postal code doesn't look valid (e.g. A1A 1A1). Fix it and save again.");
+      setStoresError("Nothing saved — that postal code doesn't look valid. Fix it and save again.");
       return;
     }
     setStoresError(null);
@@ -205,7 +205,7 @@ export default function SettingsPage() {
           <input
             value={postal}
             onChange={(e) => setPostal(e.target.value.toUpperCase())}
-            placeholder="POSTAL CODE — A1A 1A1"
+            placeholder="POSTAL CODE"
             maxLength={7}
             className="w-56 bg-paper border-2 border-ink px-3 py-2 font-mono text-sm text-ink placeholder:text-ink-soft/60 focus:bg-tag/20 outline-none transition-colors"
           />
