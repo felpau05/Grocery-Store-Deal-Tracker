@@ -1,0 +1,64 @@
+# Production orchestration — run on the EC2 instance with:
+#   docker compose -f docker-compose.prod.yml up --build -d
+#
+# Differences from the dev docker-compose.yml (see that file's header
+# for the dev-scaling design this diverges from):
+#   - restart: unless-stopped on every service (dev wants crashes loud)
+#   - backend builds from Dockerfile.prod (no --reload, single worker)
+#     and drops the dev bind-mount, which would shadow the built image
+#   - backend calls scraper-go directly over the Compose network
+#     (http://scraper-go:8080) instead of routing through the proxy —
+#     there's exactly one replica of each service here, so the dev
+#     Caddyfile's load-balancing indirection has nothing to do, and
+#     skipping it keeps scraper-go off any public-facing listener
+#   - redis and scraper-go publish no host ports at all — internal-only
+#   - proxy publishes 80/443 (not 8000/8080), serves real HTTPS via
+#     Caddyfile.prod, and persists its ACME state in named volumes so
+#     restarts don't re-trigger Let's Encrypt issuance
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  scraper-go:
+    build:
+      context: ./scraper-go
+    env_file:
+      - ./scraper-go/.env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      LISTEN_ADDR: :8080
+    restart: unless-stopped
+    depends_on:
+      - redis
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    env_file:
+      - ./.env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      SCRAPER_SERVICE_URL: http://scraper-go:8080
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - scraper-go
+
+  proxy:
+    image: caddy:2
+    volumes:
+      - ./proxy/Caddyfile.prod:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,11 @@
+# Production Caddyfile — real domain, automatic Let's Encrypt HTTPS.
+# Unlike the dev Caddyfile, there is deliberately no site block for
+# scraper-go: it's reached only over the internal Compose network
+# (http://scraper-go:8080) and is never exposed to the internet.
+{
+	admin off
+}
+
+grocerytracker.duckdns.org {
+	reverse_proxy backend:8000
+}

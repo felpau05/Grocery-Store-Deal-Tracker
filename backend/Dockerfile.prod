@@ -1,0 +1,17 @@
+# Production image for the FastAPI backend — used only by
+# docker-compose.prod.yml. See Dockerfile for the local-dev variant
+# (--reload, bind-mounted source).
+FROM python:3.10-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+EXPOSE 8000
+# --workers 1 is a hard constraint on the free-tier 1GB instance, not a
+# tuning knob: each extra uvicorn worker reloads scikit-learn/fasttext/
+# pandas into its own process memory.
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
