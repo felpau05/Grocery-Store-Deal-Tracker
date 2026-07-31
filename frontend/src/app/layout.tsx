@@ -27,15 +27,21 @@ const spaceMono = Space_Mono({
 export const metadata: Metadata = {
   title: "Grocery Store Deals",
   description:
-    "Live deals pulled from local grocery flyers — sorted, normalized, and priced per unit so you can actually compare.",
+    "Live deals pulled from local grocery flyers.",
   icons: {
-    icon: [{ url: "/watermelon_1.svg", type: "image/svg+xml" }],
+    // .ico first for crawlers and older clients that only ever look for
+    // /favicon.ico (and never parse this tag); modern browsers pick the
+    // SVG since it's the sharper, later match.
+    icon: [
+      { url: "/favicon.ico", sizes: "16x16 32x32 48x48", type: "image/x-icon" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
   },
   openGraph: {
-    title: "flippwatch",
+    title: "grocerytracker",
     description:
-      "Live deals pulled from local grocery flyers — sorted, normalized, and priced per unit so you can actually compare.",
-    siteName: "flippwatch",
+      "Live deals pulled from local grocery flyers.",
+    siteName: "grocerytracker",
     type: "website",
   },
 };

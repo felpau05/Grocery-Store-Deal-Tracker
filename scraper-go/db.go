@@ -101,12 +101,33 @@ func upsertFlyer(ctx context.Context, pool *pgxpool.Pool, f Flyer, postalCode st
 			valid_to = EXCLUDED.valid_to,
 			scraped_at = now()
 	`, f.ID, f.MerchantID, postalCode, f.ValidFrom, f.ValidTo)
+	if err != nil {
+		return err
+	}
+
+	// Record that this flyer reaches this postal code. flyers.postal_code
+	// above is last-write-wins and so only ever remembers one region;
+	// this junction is the authoritative many-to-many mapping every
+	// region-scoped read goes through. Bumping last_seen_at on conflict
+	// leaves a trail for expiring mappings Flipp stops serving.
+	if postalCode != "" {
+		_, err = pool.Exec(ctx, `
+			INSERT INTO flyer_postal_codes (flyer_id, postal_code)
+			VALUES ($1, $2)
+			ON CONFLICT (flyer_id, postal_code) DO UPDATE SET last_seen_at = now()
+		`, f.ID, postalCode)
+	}
 	return err
 }
 
+// Mirrors the items uniqueness key. Keyed on flyerID, not postal code:
+// Flipp serves one flyer to many nearby postal codes, so keying on
+// postal code re-inserted a full copy of every item per extra postal
+// code in the same area (44% of the table at migration time). Which
+// regions a flyer reaches lives in flyer_postal_codes instead.
 type itemKey struct {
 	merchantID int64
-	postal     string
+	flyerID    int64
 	nameNorm   string
 	validFrom  string
 }
@@ -152,7 +173,7 @@ func writeItemBatch(ctx context.Context, pool *pgxpool.Pool, items []*Item) (sav
 	// one per duplicate.
 	lastByKey := make(map[itemKey]int, len(valid))
 	for i, it := range valid {
-		lastByKey[itemKey{it.MerchantID, it.PostalCode, it.NameNormalized, validFromKeys[i]}] = i
+		lastByKey[itemKey{it.MerchantID, it.FlyerID, it.NameNormalized, validFromKeys[i]}] = i
 	}
 	if len(lastByKey) < len(valid) {
 		dedupedIdx := make([]int, 0, len(lastByKey))
@@ -252,8 +273,7 @@ func writeItemBatch(ctx context.Context, pool *pgxpool.Pool, items []*Item) (sav
 			size, size_unit, product_image, cutout_image,
 			high_confidence, valid_from, valid_to
 		)
-		ON CONFLICT (merchant_id, postal_code, name_normalized, valid_from) DO UPDATE SET
-			flyer_id = EXCLUDED.flyer_id,
+		ON CONFLICT (merchant_id, flyer_id, name_normalized, valid_from) DO UPDATE SET
 			flipp_item_id = EXCLUDED.flipp_item_id,
 			name = EXCLUDED.name,
 			original_name = EXCLUDED.original_name,
@@ -269,7 +289,10 @@ func writeItemBatch(ctx context.Context, pool *pgxpool.Pool, items []*Item) (sav
 			high_confidence = EXCLUDED.high_confidence,
 			valid_to = EXCLUDED.valid_to,
 			updated_at = now()
-		RETURNING id, merchant_id, postal_code, name_normalized, valid_from
+		-- postal_code is deliberately NOT in the SET list above: it is
+		-- lineage only now (which scrape first created the row), and the
+		-- authoritative region mapping is flyer_postal_codes.
+		RETURNING id, merchant_id, flyer_id, name_normalized, valid_from
 	`,
 		merchantIDs, flyerIDs, flippItemIDs, postalCodes, names, namesNorm,
 		originalNames, originalDescriptions, brandsJSON,
@@ -283,14 +306,14 @@ func writeItemBatch(ctx context.Context, pool *pgxpool.Pool, items []*Item) (sav
 
 	idByKey := make(map[itemKey]int64, n)
 	for rows.Next() {
-		var id, merchantID int64
-		var postal, nameNorm string
+		var id, merchantID, flyerID int64
+		var nameNorm string
 		var validFrom time.Time
-		if err := rows.Scan(&id, &merchantID, &postal, &nameNorm, &validFrom); err != nil {
+		if err := rows.Scan(&id, &merchantID, &flyerID, &nameNorm, &validFrom); err != nil {
 			rows.Close()
 			return 0, failed + n, fmt.Errorf("scan batch upsert result: %w", err)
 		}
-		idByKey[itemKey{merchantID, postal, nameNorm, validFrom.Format("2006-01-02")}] = id
+		idByKey[itemKey{merchantID, flyerID, nameNorm, validFrom.Format("2006-01-02")}] = id
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
@@ -299,7 +322,7 @@ func writeItemBatch(ctx context.Context, pool *pgxpool.Pool, items []*Item) (sav
 
 	priceHistoryRows := make([][]any, 0, n)
 	for i, it := range valid {
-		key := itemKey{it.MerchantID, it.PostalCode, it.NameNormalized, validFromKeys[i]}
+		key := itemKey{it.MerchantID, it.FlyerID, it.NameNormalized, validFromKeys[i]}
 		id, ok := idByKey[key]
 		if !ok {
 			failed++

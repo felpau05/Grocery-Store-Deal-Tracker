@@ -76,3 +76,8 @@ backend/classifier/model*.joblib
 # Markdown files (except README)
 *.md
 !README.md
+*storybook.log
+storybook-static
+
+# WSL drops these alongside files copied in from Windows
+*:Zone.Identifier

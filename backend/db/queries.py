@@ -28,12 +28,20 @@ def _shared_filter_clauses(
     `postal_code` is the region key: it lives here (not in the per-
     dimension clauses) because EVERY read is region-scoped — a caller
     only ever sees one region's data. Callers pass it already normalized.
+
+    Region scoping goes through `flyer_postal_codes` rather than matching
+    items.postal_code directly. Flipp serves one flyer to many nearby
+    postal codes, so items are stored once per flyer and the junction
+    records which regions that flyer reaches — see migration 001.
     """
     clauses: list[str] = []
     params: dict = {}
 
     if postal_code:
-        clauses.append("postal_code = %(postal_code)s")
+        clauses.append(
+            "flyer_id IN (SELECT flyer_id FROM flyer_postal_codes "
+            "WHERE postal_code = %(postal_code)s)"
+        )
         params["postal_code"] = postal_code
 
     if status == "active":
@@ -307,7 +315,10 @@ def list_categories(
     conds = ["category IS NOT NULL", "category != ''"]
     params: dict = {}
     if postal_code:
-        conds.append("postal_code = %(postal)s")
+        conds.append(
+            "flyer_id IN (SELECT flyer_id FROM flyer_postal_codes "
+            "WHERE postal_code = %(postal)s)"
+        )
         params["postal"] = postal_code
     if merchant_ids:
         conds.append("merchant_id = ANY(%(mids)s)")
@@ -333,7 +344,10 @@ def list_merchants(
     item_conds = ["i.merchant_id = m.id"]
     params: dict = {}
     if postal_code:
-        item_conds.append("i.postal_code = %(postal)s")
+        item_conds.append(
+            "i.flyer_id IN (SELECT flyer_id FROM flyer_postal_codes "
+            "WHERE postal_code = %(postal)s)"
+        )
         params["postal"] = postal_code
     merch_cond = ""
     if merchant_ids:

@@ -39,6 +39,27 @@ CREATE TABLE flyers (
 
 CREATE INDEX idx_flyers_merchant_id ON flyers(merchant_id);
 
+-- ── flyer_postal_codes ──────────────────────────────────────────────
+-- Which regions a flyer reaches (migration 001). flyers.postal_code is
+-- last-write-wins and only ever remembers one region, so this junction
+-- is the authoritative mapping and the entry point for every
+-- region-scoped read. One row per (flyer, postal code) pair — ~100 rows,
+-- versus the 7,006 duplicated item rows it replaced.
+--
+-- ON DELETE CASCADE means maintenance/prune.py cleans this up for free:
+-- it already deletes flyers left with no items, and those deletes now
+-- take the stale mappings with them.
+
+CREATE TABLE flyer_postal_codes (
+    flyer_id      BIGINT NOT NULL REFERENCES flyers(id) ON DELETE CASCADE,
+    postal_code   TEXT   NOT NULL,   -- normalized: uppercase, no spaces
+    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT now(),  -- bumped each re-scrape
+    PRIMARY KEY (flyer_id, postal_code)
+);
+
+CREATE INDEX idx_flyer_postal_codes_postal ON flyer_postal_codes(postal_code);
+
 -- ITEMS ##############################################
 
 CREATE TABLE items (
@@ -53,6 +74,10 @@ CREATE TABLE items (
     -- region. Without this, "Bananas" from a Toronto Walmart flyer and
     -- an Ottawa Walmart flyer collide on (merchant_id, name, valid_from)
     -- and the last scrape silently overwrites the other.
+    -- Lineage only since migration 001: which scrape first created this
+    -- row. NOT the region filter — reads go through flyer_postal_codes,
+    -- because one flyer (and so one item row) serves several regions.
+    -- Dropped in migration 002 once the new scraper is deployed.
     postal_code           TEXT NOT NULL,
 
     name                  TEXT NOT NULL,              -- Item.name (cleaned)
@@ -82,9 +107,14 @@ CREATE TABLE items (
 
     updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-    -- Region-aware dedup key. postal_code discriminates the same
-    -- national merchant's regional flyers; the rest is the original key.
-    UNIQUE (merchant_id, postal_code, name_normalized, valid_from)
+    -- Flyer-scoped dedup key (migration 001). Was keyed on postal_code,
+    -- but Flipp serves ONE flyer to MANY nearby postal codes, so every
+    -- extra postal code in the same area re-inserted a full copy of that
+    -- flyer's items — 44% of the table was redundant. flyer_id
+    -- discriminates the same national merchant's regional flyers more
+    -- precisely than a raw postal code ever could, because it is keyed
+    -- off what Flipp itself considers "the same flyer".
+    UNIQUE (merchant_id, flyer_id, name_normalized, valid_from)
 );
 
 CREATE TRIGGER items_set_updated_at
@@ -96,7 +126,7 @@ CREATE INDEX idx_items_flyer_id        ON items(flyer_id);
 CREATE INDEX idx_items_category        ON items(category);
 CREATE INDEX idx_items_subcategory     ON items(subcategory);
 CREATE INDEX idx_items_valid_to        ON items(valid_to);
-CREATE INDEX idx_items_postal_code     ON items(postal_code);  -- every read filters by region
+CREATE INDEX idx_items_flyer_id_lookup ON items(flyer_id);  -- every read scopes by region via flyer_postal_codes
 CREATE INDEX idx_items_name_trgm       ON items USING gin (name gin_trgm_ops);  -- keyword search
 
 
@@ -151,7 +181,8 @@ SELECT
     i.valid_from,
     i.valid_to,
     m.id   AS merchant_id,
-    m.name AS merchant_name
+    m.name AS merchant_name,
+    i.flyer_id   -- readers scope by region through flyer_postal_codes
 FROM items i
 JOIN merchants m ON m.id = i.merchant_id
 WHERE CURRENT_DATE BETWEEN i.valid_from AND i.valid_to;
