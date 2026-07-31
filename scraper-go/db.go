@@ -199,7 +199,6 @@ func writeItemBatch(ctx context.Context, pool *pgxpool.Pool, items []*Item) (sav
 	merchantIDs := make([]int64, n)
 	flyerIDs := make([]int64, n)
 	flippItemIDs := make([]*int64, n)
-	postalCodes := make([]string, n)
 	names := make([]string, n)
 	namesNorm := make([]string, n)
 	originalNames := make([]*string, n)
@@ -221,7 +220,6 @@ func writeItemBatch(ctx context.Context, pool *pgxpool.Pool, items []*Item) (sav
 			id := it.FlippItemID
 			flippItemIDs[i] = &id
 		}
-		postalCodes[i] = it.PostalCode
 		names[i] = it.Name
 		namesNorm[i] = it.NameNormalized
 		originalNames[i] = nullableString(it.OriginalName)
@@ -242,14 +240,14 @@ func writeItemBatch(ctx context.Context, pool *pgxpool.Pool, items []*Item) (sav
 
 	rows, err := pool.Query(ctx, `
 		INSERT INTO items (
-			merchant_id, flyer_id, flipp_item_id, postal_code, name, name_normalized,
+			merchant_id, flyer_id, flipp_item_id, name, name_normalized,
 			original_name, original_description, brands,
 			price, price_unit, price_unit_factor,
 			size, size_unit, product_image, cutout_image,
 			high_confidence, valid_from, valid_to
 		)
 		SELECT
-			t.merchant_id, t.flyer_id, t.flipp_item_id, t.postal_code, t.name, t.name_normalized,
+			t.merchant_id, t.flyer_id, t.flipp_item_id, t.name, t.name_normalized,
 			t.original_name, t.original_description,
 			-- UNNEST fully flattens multi-dimensional arrays (there is no
 			-- "one level at a time" mode), so a per-row TEXT[] can't be
@@ -261,13 +259,13 @@ func writeItemBatch(ctx context.Context, pool *pgxpool.Pool, items []*Item) (sav
 			t.size, t.size_unit, t.product_image, t.cutout_image,
 			t.high_confidence, t.valid_from, t.valid_to
 		FROM UNNEST(
-			$1::bigint[], $2::bigint[], $3::bigint[], $4::text[], $5::text[], $6::text[],
-			$7::text[], $8::text[], $9::text[],
-			$10::numeric[], $11::text[], $12::numeric[],
-			$13::numeric[], $14::text[], $15::text[], $16::text[],
-			$17::boolean[], $18::date[], $19::date[]
+			$1::bigint[], $2::bigint[], $3::bigint[], $4::text[], $5::text[],
+			$6::text[], $7::text[], $8::text[],
+			$9::numeric[], $10::text[], $11::numeric[],
+			$12::numeric[], $13::text[], $14::text[], $15::text[],
+			$16::boolean[], $17::date[], $18::date[]
 		) AS t(
-			merchant_id, flyer_id, flipp_item_id, postal_code, name, name_normalized,
+			merchant_id, flyer_id, flipp_item_id, name, name_normalized,
 			original_name, original_description, brands_json,
 			price, price_unit, price_unit_factor,
 			size, size_unit, product_image, cutout_image,
@@ -289,12 +287,9 @@ func writeItemBatch(ctx context.Context, pool *pgxpool.Pool, items []*Item) (sav
 			high_confidence = EXCLUDED.high_confidence,
 			valid_to = EXCLUDED.valid_to,
 			updated_at = now()
-		-- postal_code is deliberately NOT in the SET list above: it is
-		-- lineage only now (which scrape first created the row), and the
-		-- authoritative region mapping is flyer_postal_codes.
 		RETURNING id, merchant_id, flyer_id, name_normalized, valid_from
 	`,
-		merchantIDs, flyerIDs, flippItemIDs, postalCodes, names, namesNorm,
+		merchantIDs, flyerIDs, flippItemIDs, names, namesNorm,
 		originalNames, originalDescriptions, brandsJSON,
 		prices, priceUnits, priceUnitFactors,
 		sizes, sizeUnits, productImages, cutoutImages,
