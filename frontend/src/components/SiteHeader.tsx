@@ -12,10 +12,38 @@ const TABS = [
   { href: "/list", label: "Plan a trip" },
 ];
 
+const MELON_HINT_KEY = "grocerytracker-melon-hint-seen";
+
 export default function SiteHeader() {
   const pathname = usePathname();
   const { count, openDrawer } = useCart();
   const { user, meta, scrapeStatus } = useAccount();
+
+  // Starts false so the server-rendered markup and the first client render
+  // agree — localStorage isn't readable during SSR, and rendering the
+  // callout optimistically would flash it for people who already dismissed it.
+  const [showMelonHint, setShowMelonHint] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(MELON_HINT_KEY)) return;
+    } catch {
+      return; // storage blocked — skip the hint rather than nag every load
+    }
+    // Let the page settle first; a callout that appears with the header
+    // reads as chrome, one that arrives a beat later reads as a pointer.
+    const timer = setTimeout(() => setShowMelonHint(true), 1200);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const dismissMelonHint = () => {
+    setShowMelonHint(false);
+    try {
+      window.localStorage.setItem(MELON_HINT_KEY, "1");
+    } catch {
+      // non-fatal: the hint just returns next visit
+    }
+  };
 
   // A signed-in account NEVER falls back to the example area (see
   // page.tsx's isSignedInBlocked) — so the chip must show the account's
@@ -69,6 +97,40 @@ export default function SiteHeader() {
                 </Link>
               );
             })}
+
+            {/* Plain <a>, not next/link: the 3D toy is a standalone static
+                page in public/, not an App Router route, so it needs a real
+                navigation rather than a client-side one. */}
+            <span className="relative">
+              <a
+                href="/watermelon.html"
+                title="Play with the 3D watermelon"
+                aria-label="Play with the 3D watermelon"
+                onClick={dismissMelonHint}
+                className="flex items-center gap-1.5 bg-tag text-ink border-2 border-ink shadow-[3px_3px_0_var(--color-ink)] px-2.5 py-1.5 font-mono font-bold text-[11px] uppercase tracking-[0.08em] hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[5px_5px_0_var(--color-ink)] transition-all"
+              >
+                <span className={showMelonHint ? "" : "animate-melon"}>🍉</span>
+                <span className="hidden sm:inline">Play</span>
+              </a>
+
+              {/* First visit only — points at the button, then never
+                  returns once dismissed (or once they've gone and played). */}
+              {showMelonHint && (
+                <span className="animate-callout absolute top-full right-0 mt-2 w-max max-w-[62vw] z-30">
+                  <span className="block bg-ink text-paper border-2 border-ink shadow-[4px_4px_0_var(--color-tag)] px-3 py-2 -rotate-2">
+                    <span className="block font-display text-[12px] leading-tight">
+                      Slice a 3D watermelon 🍉
+                    </span>
+                    <button
+                      onClick={dismissMelonHint}
+                      className="mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-tag hover:text-paper transition-colors"
+                    >
+                      Got it
+                    </button>
+                  </span>
+                </span>
+              )}
+            </span>
           </nav>
 
           {/* Scraping indicator — visible on every page while an

@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>3D Watermelon Hero</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: radial-gradient(ellipse at 50% 30%, #fff3c4 0%, #ffd66b 35%, #ff9f4a 70%, #ff6b6b 100%);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  #canvas-wrap { width: 100%; height: 100%; touch-action: none; cursor: grab; }
+  #canvas-wrap.dragging { cursor: grabbing; }
+  .ui-group {
+    position: absolute;
+    display: flex;
+    gap: 10px;
+  }
+  #ui-bottom {
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  #ui-left {
+    left: 26px;
+    top: 50%;
+    transform: translateY(-50%);
+    flex-direction: column;
+  }
+  #ui-right {
+    right: 26px;
+    top: 50%;
+    transform: translateY(-50%);
+    flex-direction: column;
+  }
+  .ui-group button {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    border: 1px solid rgba(120, 60, 20, 0.3);
+    background: rgba(255, 255, 255, 0.4);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    color: #6b3a12;
+    font-size: 19px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .ui-group button:hover { background: rgba(255, 255, 255, 0.65); }
+  .ui-group button:active { transform: scale(0.92); }
+
+  /* Back to the deals app. Same glass treatment as the controls, but
+     pill-shaped and top-left so it never sits under the orbit controls. */
+  #back-link {
+    position: absolute;
+    top: 26px;
+    left: 26px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 18px;
+    border-radius: 999px;
+    border: 1px solid rgba(120, 60, 20, 0.3);
+    background: rgba(255, 255, 255, 0.4);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    color: #6b3a12;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-decoration: none;
+    transition: background 0.15s, transform 0.1s;
+  }
+  #back-link:hover { background: rgba(255, 255, 255, 0.65); }
+  #back-link:active { transform: scale(0.96); }
+</style>
+</head>
+<body>
+<div id="canvas-wrap"></div>
+<a id="back-link" href="/">&#8592;&nbsp;Back to deals</a>
+<div class="ui-group" id="ui-left">
+  <button id="spin-left" title="Spin faster left">&#9664;</button>
+  <button id="pause" title="Pause rotation">&#10074;&#10074;</button>
+  <button id="spin-right" title="Spin faster right">&#9654;</button>
+</div>
+<div class="ui-group" id="ui-right">
+  <button id="zoom-in" title="Zoom in">+</button>
+  <button id="zoom-out" title="Zoom out">&minus;</button>
+  <button id="spread" title="Spread pieces apart">&#10530;</button>
+  <button id="gather" title="Gather pieces closer">&#10529;</button>
+</div>
+<div class="ui-group" id="ui-bottom">
+  <button id="drop" title="Drop everything">&#8595;</button>
+  <button id="undo" title="Undo last slice">&#8630;</button>
+  <button id="reset" title="Reset">&#8634;</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function() {
+
+  /* ============================================================
+     TUNING PARAMETERS — edit these to change the feel
+     ============================================================ */
+  const CONFIG = {
+    // How strongly a drag spins the melon. LOWER = feels heavier /
+    // harder to get spinning. (try 0.002 for very heavy, 0.01 for light)
+    DRAG_SENSITIVITY: 0.0038,
+
+    // Momentum retention per frame after release. HIGHER = spins longer.
+    INERTIA_DECAY: 0.995,
+
+    // Same two knobs but for rotating an individual piece in place.
+    PIECE_DRAG_SENSITIVITY: 0.006,
+    PIECE_INERTIA_DECAY: 0.992,
+
+    // How much each ◀ / ▶ button press changes the idle spin (rad/s).
+    SPIN_STEP: 0.18,
+    SPIN_MAX: 1.6,
+
+    // Gap pieces move apart when sliced.
+    SLICE_GAP: 0.85,
+
+    // Gravity strength, floor height, max throw speed, camera orbit feel.
+    GRAVITY: 13,
+    FLOOR_Y: -2.2,
+    THROW_MAX: 14,
+    ORBIT_SENSITIVITY: 0.005,
+
+    // Arena bounds: pieces can't leave this cylinder.
+    WORLD_RADIUS: 5.2,
+    CEILING_Y: 5,
+
+    // How far each spread/gather button press moves pieces out/in,
+    // and the closest a piece may be pulled toward the center.
+    SPREAD_STEP: 0.45,
+    GATHER_MIN: 0.4
+  };
+  /* ============================================================ */
+
+  const wrapEl = document.getElementById('canvas-wrap');
+  const R = 1.5;
+  const WEDGES = 8;
+
+  const CENTROID = { 8: 0, 4: 0.5625, 2: 0.72, 1: 0.84 };
+  const BOUND_R = { 8: 1.5, 4: 1.2, 2: 0.95, 1: 0.75 };
+
+  function rand(a, b) { return a + Math.random() * (b - a); }
+
+  function makeRindCanvas() {
+    const w = 2048, h = 1024;
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, '#12310f');
+    grad.addColorStop(0.5, '#0e2a0e');
+    grad.addColorStop(1, '#123512');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    function blob(x, y, size, color, alpha) {
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = color;
+      const lobes = 3 + Math.floor(rand(0, 3));
+      for (let l = 0; l < lobes; l++) {
+        ctx.beginPath();
+        ctx.ellipse(
+          x + rand(-size * 0.4, size * 0.4),
+          y + rand(-size * 0.4, size * 0.4),
+          size * rand(0.45, 0.8), size * rand(0.35, 0.65),
+          rand(0, Math.PI), 0, Math.PI * 2
+        );
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    const bands = 8;
+    const spacing = w / bands;
+    const greens = ['#5cb43e', '#74cc4a', '#8fdf58', '#4da337', '#a4e968'];
+
+    for (let i = 0; i < bands; i++) {
+      const baseX = (i + 0.5) * spacing;
+      const ph = rand(0, 6.28);
+      for (let b = 0; b < 90; b++) {
+        const y = rand(0, h);
+        const wob = Math.sin(y * 0.006 + ph) * 40;
+        const x = baseX + wob + rand(-58, 58);
+        const col = greens[Math.floor(rand(0, greens.length))];
+        blob(x, y, rand(14, 46), col, rand(0.55, 0.95));
+      }
+      for (let b = 0; b < 40; b++) {
+        const y = rand(0, h);
+        const wob = Math.sin(y * 0.006 + ph) * 40;
+        blob(baseX + wob + rand(-40, 40), y, rand(4, 12), '#b8f07a', rand(0.4, 0.8));
+      }
+    }
+
+    for (let b = 0; b < 260; b++) {
+      blob(rand(0, w), rand(0, h), rand(3, 10), '#3f8f31', rand(0.25, 0.55));
+    }
+
+    for (let i = 0; i < 2600; i++) {
+      const dark = Math.random() > 0.5;
+      ctx.fillStyle = dark ? 'rgba(6,22,7,0.2)' : 'rgba(180,235,120,0.14)';
+      ctx.beginPath();
+      ctx.arc(rand(0, w), rand(0, h), rand(0.6, 2), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    const burstH = 130;
+    for (let i = 0; i < 90; i++) {
+      const x = rand(0, w);
+      const bh = rand(burstH * 0.35, burstH);
+      const g = ctx.createLinearGradient(0, h - bh, 0, h);
+      g.addColorStop(0, 'rgba(226,224,120,0)');
+      g.addColorStop(1, 'rgba(233,228,128,' + rand(0.35, 0.75) + ')');
+      ctx.fillStyle = g;
+      ctx.fillRect(x, h - bh, rand(8, 26), bh);
+    }
+    const sg = ctx.createLinearGradient(0, h - 46, 0, h);
+    sg.addColorStop(0, 'rgba(210,205,110,0)');
+    sg.addColorStop(1, 'rgba(222,214,118,0.55)');
+    ctx.fillStyle = sg;
+    ctx.fillRect(0, h - 46, w, 46);
+    ctx.fillStyle = '#6b4a2a';
+    ctx.fillRect(0, h - 13, w, 13);
+    ctx.fillStyle = '#3d2916';
+    ctx.fillRect(0, h - 6, w, 6);
+
+    ctx.fillStyle = '#7a5a36';
+    ctx.fillRect(0, 0, w, 8);
+    ctx.fillStyle = 'rgba(190,200,110,0.4)';
+    ctx.fillRect(0, 8, w, 14);
+
+    return c;
+  }
+
+  function makeFleshTexture() {
+    const s = 1024;
+    const c = document.createElement('canvas');
+    c.width = s; c.height = s;
+    const ctx = c.getContext('2d');
+    const cx = s / 2, cy = s / 2, r = s / 2;
+
+    ctx.fillStyle = '#144a17';
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#4fb43e';
+    ctx.beginPath(); ctx.arc(cx, cy, r * 0.968, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#c8ec8f';
+    ctx.beginPath(); ctx.arc(cx, cy, r * 0.947, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#f6fbe4';
+    ctx.beginPath(); ctx.arc(cx, cy, r * 0.93, 0, Math.PI * 2); ctx.fill();
+
+    const fg = ctx.createRadialGradient(cx, cy, r * 0.04, cx, cy, r * 0.912);
+    fg.addColorStop(0, '#ff8a8c');
+    fg.addColorStop(0.35, '#ff4f5e');
+    fg.addColorStop(0.85, '#f7203b');
+    fg.addColorStop(0.97, '#ff9285');
+    fg.addColorStop(1, '#f9e4d1');
+    ctx.fillStyle = fg;
+    ctx.beginPath(); ctx.arc(cx, cy, r * 0.912, 0, Math.PI * 2); ctx.fill();
+
+    for (let i = 0; i < 150; i++) {
+      const a = rand(0, Math.PI * 2);
+      const r0 = r * rand(0.05, 0.2);
+      const r1 = r * rand(0.45, 0.84);
+      const bend = rand(-0.12, 0.12);
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+      ctx.quadraticCurveTo(
+        cx + Math.cos(a + bend) * (r0 + r1) * 0.5,
+        cy + Math.sin(a + bend) * (r0 + r1) * 0.5,
+        cx + Math.cos(a) * r1, cy + Math.sin(a) * r1
+      );
+      const light = Math.random() > 0.5;
+      ctx.strokeStyle = light ? 'rgba(255,150,150,0.18)' : 'rgba(215,20,45,0.18)';
+      ctx.lineWidth = rand(2, 6);
+      ctx.stroke();
+    }
+
+    for (let i = 0; i < 14; i++) {
+      const a = rand(0, Math.PI * 2);
+      const rr = r * rand(0.15, 0.6);
+      const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr;
+      const rad = r * rand(0.05, 0.13);
+      const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
+      g.addColorStop(0, 'rgba(255,255,255,0.12)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill();
+    }
+
+    function seed(x, y, ang, len, wid, dark) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(ang);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, wid, len, 0, 0, Math.PI * 2);
+      ctx.fillStyle = dark ? '#2b1508' : '#efe0c4';
+      ctx.fill();
+      if (dark) {
+        ctx.strokeStyle = '#180b03';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse(-wid * 0.25, -len * 0.45, wid * 0.3, len * 0.22, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.32)';
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    for (let i = 0; i < 26; i++) {
+      const a = rand(0, Math.PI * 2);
+      const rr = r * rand(0.34, 0.7);
+      seed(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, a + Math.PI / 2 + rand(-0.25, 0.25), rand(12, 16), rand(6.5, 8.5), true);
+    }
+    for (let i = 0; i < 12; i++) {
+      const a = rand(0, Math.PI * 2);
+      const rr = r * rand(0.12, 0.5);
+      seed(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, a + Math.PI / 2 + rand(-0.3, 0.3), rand(8, 11), rand(4.5, 6), false);
+    }
+    return new THREE.CanvasTexture(c);
+  }
+
+  function makeEnvMap() {
+    function face(stops, blob) {
+      const s = 128;
+      const c = document.createElement('canvas');
+      c.width = s; c.height = s;
+      const ctx = c.getContext('2d');
+      const g = ctx.createLinearGradient(0, 0, 0, s);
+      for (const [o, col] of stops) g.addColorStop(o, col);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, s, s);
+      if (blob) {
+        const rg = ctx.createRadialGradient(s * 0.5, s * 0.35, 0, s * 0.5, s * 0.35, s * 0.42);
+        rg.addColorStop(0, 'rgba(255,255,255,0.95)');
+        rg.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = rg;
+        ctx.fillRect(0, 0, s, s);
+      }
+      return c;
+    }
+    const side = [[0, '#fff2c8'], [0.6, '#ffcf7d'], [1, '#ff9d5e']];
+    const tex = new THREE.CubeTexture([
+      face(side, true),
+      face(side, false),
+      face([[0, '#fffbe8'], [1, '#ffe9a8']], false),
+      face([[0, '#ff9d5e'], [1, '#ff7a60']], false),
+      face(side, false),
+      face(side, false)
+    ]);
+    tex.needsUpdate = true;
+    return tex;
+  }
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(38, wrapEl.clientWidth / wrapEl.clientHeight, 0.1, 100);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(wrapEl.clientWidth, wrapEl.clientHeight);
+  wrapEl.appendChild(renderer.domElement);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+  const key = new THREE.DirectionalLight(0xffffff, 1.05);
+  key.position.set(3, 4, 5);
+  scene.add(key);
+  const rim = new THREE.DirectionalLight(0xffd9a0, 0.55);
+  rim.position.set(-4, -2, -3);
+  scene.add(rim);
+
+  const envMap = makeEnvMap();
+  const rindCanvas = makeRindCanvas();
+  const fleshTex = makeFleshTexture();
+  fleshTex.anisotropy = 4;
+  const fleshMat = new THREE.MeshStandardMaterial({
+    map: fleshTex, roughness: 0.62, metalness: 0, side: THREE.DoubleSide,
+    envMap: envMap, envMapIntensity: 0.2
+  });
+
+  const cutFaceGeo = new THREE.CircleGeometry(R, 48, -Math.PI / 2, Math.PI);
+
+  const melonGroup = new THREE.Group();
+  scene.add(melonGroup);
+
+  const wedgeGroups = [];
+  for (let i = 0; i < WEDGES; i++) {
+    const p0 = i * (Math.PI * 2 / WEDGES);
+    const len = Math.PI * 2 / WEDGES;
+
+    const tex = new THREE.CanvasTexture(rindCanvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.repeat.x = len / (Math.PI * 2);
+    tex.offset.x = p0 / (Math.PI * 2);
+    tex.anisotropy = 4;
+    const rindMat = new THREE.MeshStandardMaterial({
+      map: tex, roughness: 0.28, metalness: 0.02,
+      bumpMap: tex, bumpScale: 0.01,
+      envMap: envMap, envMapIntensity: 0.6
+    });
+
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(R, 32, 48, p0, len), rindMat));
+
+    const faceA = new THREE.Mesh(cutFaceGeo, fleshMat);
+    faceA.rotation.y = Math.PI + p0;
+    const faceB = new THREE.Mesh(cutFaceGeo, fleshMat);
+    faceB.rotation.y = Math.PI + p0 + len;
+    g.add(faceA, faceB);
+
+    wedgeGroups.push(g);
+  }
+
+  const shadowTex = (function() {
+    const s = 256;
+    const c = document.createElement('canvas');
+    c.width = s; c.height = s;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(s/2, s/2, 0, s/2, s/2, s/2);
+    g.addColorStop(0, 'rgba(0,0,0,0.33)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, s, s);
+    return new THREE.CanvasTexture(c);
+  })();
+
+  const shadowMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false })
+  );
+  shadowMesh.rotation.x = -Math.PI / 2;
+  shadowMesh.position.y = CONFIG.FLOOR_Y - 0.04;
+  shadowMesh.scale.set(4.2, 3.6, 1);
+  shadowMesh.renderOrder = 2;
+  scene.add(shadowMesh);
+
+  // Visible floor disc with boundary ring (shown while gravity is on).
+  const floorTex = (function() {
+    const s = 1024;
+    const c = document.createElement('canvas');
+    c.width = s; c.height = s;
+    const ctx = c.getContext('2d');
+    const cx = s / 2, r = s / 2;
+    const g = ctx.createRadialGradient(cx, cx, 0, cx, cx, r);
+    g.addColorStop(0, 'rgba(255,246,220,0.95)');
+    g.addColorStop(0.45, 'rgba(255,222,160,0.8)');
+    g.addColorStop(0.8, 'rgba(255,198,130,0.45)');
+    g.addColorStop(1, 'rgba(255,190,120,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cx, r, 0, Math.PI * 2); ctx.fill();
+
+    ctx.strokeStyle = 'rgba(165,85,30,0.4)';
+    ctx.lineWidth = 10;
+    ctx.beginPath(); ctx.arc(cx, cx, r * 0.9, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(165,85,30,0.15)';
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(cx, cx, r * 0.6, 0, Math.PI * 2); ctx.stroke();
+    return new THREE.CanvasTexture(c);
+  })();
+  const floorMesh = new THREE.Mesh(
+    new THREE.CircleGeometry(CONFIG.WORLD_RADIUS / 0.9, 64),
+    new THREE.MeshBasicMaterial({ map: floorTex, transparent: true, opacity: 0, depthWrite: false })
+  );
+  floorMesh.rotation.x = -Math.PI / 2;
+  floorMesh.position.y = CONFIG.FLOOR_Y - 0.08;
+  floorMesh.renderOrder = 1;
+  floorMesh.visible = false;
+  scene.add(floorMesh);
+
+  function midDir(start, count) {
+    const mid = (start + count / 2) * (Math.PI * 2 / WEDGES);
+    return new THREE.Vector3(-Math.cos(mid), 0, Math.sin(mid));
+  }
+
+  function buildColliderSpheres(start, count, cNeg) {
+    const d = midDir(start, count);
+    const defs = [];
+    function S(px, py, pz, r) {
+      defs.push({ p: new THREE.Vector3(px, py, pz).add(cNeg), r });
+    }
+    if (count === 8) {
+      S(0, 0, 0, R);
+    } else if (count === 4) {
+      S(d.x * 0.8, 0, d.z * 0.8, 0.92);
+      S(d.x * 0.25, 0, d.z * 0.25, 0.8);
+      S(d.x * 0.2, 0.85, d.z * 0.2, 0.52);
+      S(d.x * 0.2, -0.85, d.z * 0.2, 0.52);
+    } else if (count === 2) {
+      S(d.x * 0.8, 0, d.z * 0.8, 0.62);
+      S(d.x * 0.35, 0, d.z * 0.35, 0.5);
+      S(d.x * 0.12, 0.9, d.z * 0.12, 0.4);
+      S(d.x * 0.12, -0.9, d.z * 0.12, 0.4);
+    } else {
+      S(d.x * 0.9, 0, d.z * 0.9, 0.45);
+      S(d.x * 0.45, 0, d.z * 0.45, 0.38);
+      S(d.x * 0.08, 0.95, d.z * 0.08, 0.3);
+      S(d.x * 0.08, -0.95, d.z * 0.08, 0.3);
+    }
+    return defs;
+  }
+
+  function makeCluster(start, count) {
+    const group = new THREE.Group();
+    const cNeg = midDir(start, count).multiplyScalar(-CENTROID[count]);
+    for (let i = start; i < start + count; i++) {
+      wedgeGroups[i].position.copy(cNeg);
+      group.add(wedgeGroups[i]);
+    }
+    melonGroup.add(group);
+    return {
+      start, count, group, cNeg,
+      colliders: buildColliderSpheres(start, count, cNeg),
+      targetPos: new THREE.Vector3(),
+      spinVel: new THREE.Vector2(),
+      vel: new THREE.Vector3(),
+      angVel: new THREE.Vector3(),
+      settled: false,
+      sibling: null,
+      noCollideUntil: 0,
+      shadow: null
+    };
+  }
+
+  let clusters = [makeCluster(0, WEDGES)];
+  const actions = [];
+  const meshToCluster = new Map();
+  let gravityOn = false;
+  let grabbed = null;
+  let simTime = 0;
+  let dropStates = null;
+
+  function rebuildMeshMap() {
+    meshToCluster.clear();
+    for (const cl of clusters) {
+      cl.group.traverse((o) => { if (o.isMesh) meshToCluster.set(o, cl); });
+    }
+  }
+  rebuildMeshMap();
+
+  function splitCluster(cl) {
+    if (cl.count < 2 || gravityOn) return;
+    melonGroup.remove(cl.group);
+    const half = cl.count / 2;
+    const children = [];
+    for (const s of [cl.start, cl.start + half]) {
+      const child = makeCluster(s, half);
+      child.group.quaternion.copy(cl.group.quaternion);
+      const shift = child.cNeg.clone().sub(cl.cNeg).multiplyScalar(-1)
+        .applyQuaternion(cl.group.quaternion);
+      child.group.position.copy(cl.group.position).add(shift);
+      child.targetPos.copy(child.group.position)
+        .add(midDir(s, half).applyQuaternion(cl.group.quaternion).multiplyScalar(CONFIG.SLICE_GAP));
+      children.push(child);
+    }
+    children[0].sibling = children[1];
+    children[1].sibling = children[0];
+    children[0].noCollideUntil = simTime + 0.5;
+    children[1].noCollideUntil = simTime + 0.5;
+    clusters = clusters.filter((c) => c !== cl).concat(children);
+    actions.push({ type: 'slice', parent: cl, children });
+    rebuildMeshMap();
+  }
+
+  const dropBtn = document.getElementById('drop');
+  let camDipVel = 0, camDip = 0;
+
+  function addShadows() {
+    for (const cl of clusters) {
+      const m = new THREE.Mesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false })
+      );
+      m.rotation.x = -Math.PI / 2;
+      m.position.y = CONFIG.FLOOR_Y - 0.03;
+      m.renderOrder = 2;
+      scene.add(m);
+      cl.shadow = m;
+    }
+  }
+
+  function removeShadows() {
+    for (const cl of clusters) {
+      if (cl.shadow) { scene.remove(cl.shadow); cl.shadow = null; }
+    }
+  }
+
+  function dropAll() {
+    if (gravityOn) { liftAll(); return; }
+    dropStates = [];
+    for (const cl of clusters) {
+      dropStates.push({
+        cluster: cl,
+        pos: cl.group.position.clone(),
+        quat: cl.group.quaternion.clone()
+      });
+      scene.attach(cl.group);
+      const out = cl.group.position.clone().setY(0);
+      out.length() > 0.01 ? out.normalize() : out.set(rand(-1, 1), 0, rand(-1, 1)).normalize();
+      cl.vel.copy(out.multiplyScalar(rand(0.6, 1.1)));
+      cl.vel.y = rand(0.2, 0.7);
+      cl.angVel.set(rand(-3, 3), rand(-3, 3), rand(-3, 3));
+      cl.settled = false;
+    }
+    gravityOn = true;
+    camDipVel = -4.5;
+    addShadows();
+    dropBtn.innerHTML = '&#8593;';
+    dropBtn.title = 'Lift everything back up';
+  }
+
+  function liftAll() {
+    if (!gravityOn || !dropStates) return;
+    grabbed = null;
+    removeShadows();
+    for (const st of dropStates) {
+      melonGroup.add(st.cluster.group);
+      st.cluster.group.position.copy(st.pos);
+      st.cluster.group.quaternion.copy(st.quat);
+      st.cluster.targetPos.copy(st.pos);
+      st.cluster.vel.set(0, 0, 0);
+      st.cluster.angVel.set(0, 0, 0);
+      st.cluster.settled = false;
+    }
+    dropStates = null;
+    gravityOn = false;
+    dropBtn.innerHTML = '&#8595;';
+    dropBtn.title = 'Drop everything';
+  }
+
+  function undo() {
+    if (gravityOn) return;
+    const a = actions.pop();
+    if (!a) return;
+    for (const child of a.children) {
+      melonGroup.remove(child.group);
+      for (let i = child.start; i < child.start + child.count; i++) {
+        wedgeGroups[i].position.copy(a.parent.cNeg);
+        a.parent.group.add(wedgeGroups[i]);
+      }
+    }
+    melonGroup.add(a.parent.group);
+    clusters = clusters.filter((c) => !a.children.includes(c)).concat([a.parent]);
+    rebuildMeshMap();
+  }
+
+  function resetAll() {
+    if (gravityOn) liftAll();
+    while (actions.length) undo();
+    for (const cl of clusters) cl.spinVel.set(0, 0);
+  }
+
+  const raycaster = new THREE.Raycaster();
+  const ndc = new THREE.Vector2();
+
+  function setNdc(e) {
+    const rect = wrapEl.getBoundingClientRect();
+    ndc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    ndc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  }
+
+  function pickCluster(e) {
+    setNdc(e);
+    raycaster.setFromCamera(ndc, camera);
+    const hits = raycaster.intersectObjects([...meshToCluster.keys()], false);
+    if (!hits.length) return null;
+    return { cluster: meshToCluster.get(hits[0].object), point: hits[0].point };
+  }
+
+  const tmpQ = new THREE.Quaternion();
+  const tmpV = new THREE.Vector3();
+  const tmpV2 = new THREE.Vector3();
+  const tmpV3 = new THREE.Vector3();
+  const WORLD_X = new THREE.Vector3(1, 0, 0);
+  const WORLD_Y = new THREE.Vector3(0, 1, 0);
+  const tumbleVel = new THREE.Vector2();
+  let spinSpeed = 0.22;
+  let rotationPaused = false;
+
+  function applyTumble(rx, ry) {
+    tmpQ.setFromAxisAngle(WORLD_Y, ry);
+    melonGroup.quaternion.premultiply(tmpQ);
+    tmpQ.setFromAxisAngle(WORLD_X, rx);
+    melonGroup.quaternion.premultiply(tmpQ);
+  }
+
+  function rotateClusterScreen(cl, rx, ry) {
+    tmpQ.copy(melonGroup.quaternion).invert();
+    const axY = WORLD_Y.clone().applyQuaternion(tmpQ);
+    const axX = WORLD_X.clone().applyQuaternion(tmpQ);
+    const q = new THREE.Quaternion();
+    q.setFromAxisAngle(axY, ry);
+    cl.group.quaternion.premultiply(q);
+    q.setFromAxisAngle(axX, rx);
+    cl.group.quaternion.premultiply(q);
+  }
+
+  let dragMode = null;
+  let moved = false;
+  let lastX = 0, lastY = 0;
+  let activeCluster = null;
+  const grabPlane = new THREE.Plane();
+  const throwVel = new THREE.Vector3();
+  const lastGrabPoint = new THREE.Vector3();
+  let lastGrabTime = 0;
+  let camYaw = 0;
+  let camPitch = 0.1;
+  const BASE_PITCH = 0.1;
+  let camLookY = 0;
+
+  wrapEl.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  wrapEl.addEventListener('pointerdown', (e) => {
+    moved = false;
+    lastX = e.clientX; lastY = e.clientY;
+    wrapEl.classList.add('dragging');
+    wrapEl.setPointerCapture(e.pointerId);
+
+    if (gravityOn) {
+      const hit = pickCluster(e);
+      if (hit) {
+        grabbed = hit.cluster;
+        grabbed.settled = false;
+        camera.getWorldDirection(tmpV);
+        grabPlane.setFromNormalAndCoplanarPoint(tmpV, grabbed.group.position);
+        lastGrabPoint.copy(grabbed.group.position);
+        lastGrabTime = performance.now();
+        throwVel.set(0, 0, 0);
+        dragMode = 'grab';
+      } else {
+        dragMode = 'orbit';
+      }
+      return;
+    }
+
+    const hit = pickCluster(e);
+    if (hit && clusters.length > 1) {
+      activeCluster = hit.cluster;
+      dragMode = 'piece';
+    } else {
+      dragMode = 'tumble';
+    }
+  });
+
+  wrapEl.addEventListener('pointermove', (e) => {
+    if (!dragMode) return;
+    const dx = e.clientX - lastX;
+    const dy = e.clientY - lastY;
+    if (Math.abs(dx) + Math.abs(dy) > 3) moved = true;
+
+    if (dragMode === 'tumble') {
+      applyTumble(dy * CONFIG.DRAG_SENSITIVITY, dx * CONFIG.DRAG_SENSITIVITY);
+      tumbleVel.set(dy * CONFIG.DRAG_SENSITIVITY * 60, dx * CONFIG.DRAG_SENSITIVITY * 60);
+    } else if (dragMode === 'piece' && activeCluster) {
+      rotateClusterScreen(activeCluster, dy * CONFIG.PIECE_DRAG_SENSITIVITY, dx * CONFIG.PIECE_DRAG_SENSITIVITY);
+      activeCluster.spinVel.set(
+        dy * CONFIG.PIECE_DRAG_SENSITIVITY * 60,
+        dx * CONFIG.PIECE_DRAG_SENSITIVITY * 60
+      );
+    } else if (dragMode === 'grab' && grabbed) {
+      setNdc(e);
+      raycaster.setFromCamera(ndc, camera);
+      const pt = new THREE.Vector3();
+      if (raycaster.ray.intersectPlane(grabPlane, pt)) {
+        const bound = BOUND_R[grabbed.count];
+        pt.y = Math.max(pt.y, CONFIG.FLOOR_Y + 0.3);
+        pt.y = Math.min(pt.y, CONFIG.CEILING_Y - bound);
+        const horiz = Math.sqrt(pt.x * pt.x + pt.z * pt.z);
+        const maxH = CONFIG.WORLD_RADIUS - bound;
+        if (horiz > maxH) {
+          pt.x *= maxH / horiz;
+          pt.z *= maxH / horiz;
+        }
+        const now = performance.now();
+        const gdt = Math.max((now - lastGrabTime) / 1000, 1e-3);
+        const inst = pt.clone().sub(lastGrabPoint).divideScalar(gdt);
+        throwVel.lerp(inst, 0.35);
+        lastGrabPoint.copy(pt);
+        lastGrabTime = now;
+        grabbed.group.position.lerp(pt, 0.45);
+        grabbed.vel.set(0, 0, 0);
+      }
+    } else if (dragMode === 'orbit') {
+      camYaw -= dx * CONFIG.ORBIT_SENSITIVITY;
+      camPitch = Math.max(0.02, Math.min(0.9, camPitch + dy * CONFIG.ORBIT_SENSITIVITY * 0.6));
+    }
+    lastX = e.clientX; lastY = e.clientY;
+  });
+
+  window.addEventListener('pointerup', (e) => {
+    if (dragMode === 'grab' && grabbed) {
+      if (throwVel.length() > CONFIG.THROW_MAX) {
+        throwVel.setLength(CONFIG.THROW_MAX);
+      }
+      grabbed.vel.copy(throwVel);
+      grabbed.angVel.set(rand(-2, 2), rand(-2, 2), rand(-2, 2)).multiplyScalar(Math.min(throwVel.length() / 4, 1));
+      grabbed.settled = false;
+      grabbed = null;
+    } else if (dragMode && !moved && !gravityOn) {
+      const hit = pickCluster(e);
+      if (hit) splitCluster(hit.cluster);
+    }
+    dragMode = null;
+    activeCluster = null;
+    wrapEl.classList.remove('dragging');
+  });
+
+  let camDist = 6.8;
+  let targetDist = 6.8;
+  const MIN_DIST = 3.6, MAX_DIST = 12;
+
+  document.getElementById('zoom-in').addEventListener('click', () => {
+    targetDist = Math.max(MIN_DIST, targetDist - 1.1);
+  });
+  document.getElementById('zoom-out').addEventListener('click', () => {
+    targetDist = Math.min(MAX_DIST, targetDist + 1.1);
+  });
+  document.getElementById('spin-left').addEventListener('click', () => {
+    spinSpeed = Math.max(-CONFIG.SPIN_MAX, spinSpeed - CONFIG.SPIN_STEP);
+  });
+  document.getElementById('spin-right').addEventListener('click', () => {
+    spinSpeed = Math.min(CONFIG.SPIN_MAX, spinSpeed + CONFIG.SPIN_STEP);
+  });
+  const pauseBtn = document.getElementById('pause');
+  pauseBtn.addEventListener('click', () => {
+    rotationPaused = !rotationPaused;
+    if (rotationPaused) tumbleVel.set(0, 0);
+    pauseBtn.innerHTML = rotationPaused ? '&#9654;' : '&#10074;&#10074;';
+    pauseBtn.title = rotationPaused ? 'Resume rotation' : 'Pause rotation';
+  });
+  dropBtn.addEventListener('click', dropAll);
+  document.getElementById('undo').addEventListener('click', undo);
+  document.getElementById('reset').addEventListener('click', resetAll);
+
+  // Spread pieces outward from the center, or gather them back in.
+  // No-op when the melon is whole (nothing to push apart) or during gravity.
+  function adjustSpread(sign) {
+    if (gravityOn || clusters.length < 2) return;
+    for (const cl of clusters) {
+      tmpV.copy(cl.targetPos);
+      let len = tmpV.length();
+      if (len < 0.05) {
+        tmpV.copy(midDir(cl.start, cl.count)).applyQuaternion(cl.group.quaternion);
+        len = 0.05;
+      } else {
+        tmpV.divideScalar(len);
+      }
+      const newLen = Math.max(CONFIG.GATHER_MIN, len + sign * CONFIG.SPREAD_STEP);
+      cl.targetPos.copy(tmpV.multiplyScalar(newLen));
+    }
+  }
+  document.getElementById('spread').addEventListener('click', () => adjustSpread(1));
+  document.getElementById('gather').addEventListener('click', () => adjustSpread(-1));
+
+  wrapEl.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    targetDist = Math.max(MIN_DIST, Math.min(MAX_DIST, targetDist + e.deltaY * 0.004));
+  }, { passive: false });
+
+  function worldSphere(cl, idx, out) {
+    return out.copy(cl.colliders[idx].p)
+      .applyQuaternion(cl.group.quaternion)
+      .add(cl.group.position);
+  }
+
+  function solveCollisions() {
+    for (let iter = 0; iter < 3; iter++) {
+      for (let i = 0; i < clusters.length; i++) {
+        for (let j = i + 1; j < clusters.length; j++) {
+          const A = clusters[i], B = clusters[j];
+          if (A.sibling === B && (simTime < A.noCollideUntil || simTime < B.noCollideUntil)) continue;
+
+          for (let ai = 0; ai < A.colliders.length; ai++) {
+            worldSphere(A, ai, tmpV2);
+            for (let bi = 0; bi < B.colliders.length; bi++) {
+              worldSphere(B, bi, tmpV3);
+              const rSum = A.colliders[ai].r + B.colliders[bi].r;
+              const d = tmpV.copy(tmpV3).sub(tmpV2);
+              let dist = d.length();
+              if (dist >= rSum - 0.01) continue;
+              if (dist < 1e-4) {
+                d.set(rand(-1, 1), rand(-0.3, 0.3), rand(-1, 1));
+                dist = d.length();
+              }
+              const n = d.divideScalar(dist);
+              const push = (rSum - dist) * 0.3;
+              const aHeld = A === grabbed;
+              const bHeld = B === grabbed;
+
+              if (!aHeld) {
+                const amt = bHeld ? push * 2 : push;
+                A.group.position.addScaledVector(n, -amt);
+                if (!gravityOn) A.targetPos.addScaledVector(n, -amt);
+                A.settled = false;
+              }
+              if (!bHeld) {
+                const amt = aHeld ? push * 2 : push;
+                B.group.position.addScaledVector(n, amt);
+                if (!gravityOn) B.targetPos.addScaledVector(n, amt);
+                B.settled = false;
+              }
+
+              if (gravityOn) {
+                const relVN = B.vel.dot(n) - A.vel.dot(n);
+                if (relVN < 0) {
+                  const imp = -relVN * 0.55;
+                  if (!aHeld) A.vel.addScaledVector(n, -imp * 0.5);
+                  if (!bHeld) B.vel.addScaledVector(n, imp * 0.5);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  function keepInBounds(cl) {
+    const bound = BOUND_R[cl.count];
+    const p = cl.group.position;
+    const horiz = Math.sqrt(p.x * p.x + p.z * p.z);
+    const maxH = CONFIG.WORLD_RADIUS - bound;
+    if (horiz > maxH) {
+      const nx = p.x / horiz, nz = p.z / horiz;
+      p.x = nx * maxH;
+      p.z = nz * maxH;
+      const vRad = cl.vel.x * nx + cl.vel.z * nz;
+      if (vRad > 0) {
+        cl.vel.x -= nx * vRad * 1.5;
+        cl.vel.z -= nz * vRad * 1.5;
+      }
+      cl.settled = false;
+    }
+    if (p.y + bound > CONFIG.CEILING_Y) {
+      p.y = CONFIG.CEILING_Y - bound;
+      if (cl.vel.y > 0) cl.vel.y = -cl.vel.y * 0.4;
+    }
+  }
+
+  function stepPhysics(cl, dt) {
+    if (cl === grabbed || cl.settled) return;
+    cl.vel.y -= CONFIG.GRAVITY * dt;
+    cl.group.position.addScaledVector(cl.vel, dt);
+
+    let minBottom = Infinity;
+    for (let i = 0; i < cl.colliders.length; i++) {
+      worldSphere(cl, i, tmpV2);
+      minBottom = Math.min(minBottom, tmpV2.y - cl.colliders[i].r);
+    }
+    let grounded = false;
+    const pen = CONFIG.FLOOR_Y - minBottom;
+    if (pen > 0) {
+      cl.group.position.y += pen;
+      grounded = true;
+      if (cl.vel.y < 0) cl.vel.y = Math.abs(cl.vel.y) > 0.8 ? -cl.vel.y * 0.35 : 0;
+      cl.vel.x *= 0.86;
+      cl.vel.z *= 0.86;
+      cl.angVel.multiplyScalar(0.82);
+    }
+
+    keepInBounds(cl);
+
+    const spin = cl.angVel.length();
+    if (spin > 1e-4) {
+      tmpV.copy(cl.angVel).normalize();
+      tmpQ.setFromAxisAngle(tmpV, spin * dt);
+      cl.group.quaternion.premultiply(tmpQ);
+    }
+
+    if (grounded && cl.vel.length() < 0.05 && spin < 0.25) {
+      cl.vel.set(0, 0, 0);
+      cl.angVel.set(0, 0, 0);
+      cl.settled = true;
+    }
+  }
+
+  let prev = performance.now();
+  let t = 0;
+
+  function animate(now) {
+    requestAnimationFrame(animate);
+    const dt = Math.min((now - prev) / 1000, 0.033);
+    prev = now;
+    t += dt;
+    simTime = t;
+
+    const decay = Math.pow(CONFIG.INERTIA_DECAY, dt * 60);
+    const pieceDecay = Math.pow(CONFIG.PIECE_INERTIA_DECAY, dt * 60);
+
+    if (!gravityOn) {
+      if (dragMode !== 'tumble' && !rotationPaused) {
+        if (tumbleVel.length() > 0.001) {
+          applyTumble(tumbleVel.x * dt, tumbleVel.y * dt);
+          tumbleVel.multiplyScalar(decay);
+        }
+        applyTumble(0, spinSpeed * dt);
+      }
+
+      for (const cl of clusters) {
+        if (cl !== activeCluster && cl.spinVel.length() > 0.001) {
+          rotateClusterScreen(cl, cl.spinVel.x * dt, cl.spinVel.y * dt);
+          cl.spinVel.multiplyScalar(pieceDecay);
+        }
+      }
+
+      melonGroup.position.y = Math.sin(t * 1.2) * 0.08;
+
+      const k = 1 - Math.pow(0.002, dt);
+      for (const cl of clusters) {
+        cl.group.position.lerp(cl.targetPos, k);
+      }
+      if (clusters.length > 1) solveCollisions();
+
+      const ease = 1 - Math.pow(0.01, dt);
+      camYaw += (0 - camYaw) * ease;
+      camPitch += (BASE_PITCH - camPitch) * ease;
+    } else {
+      for (const cl of clusters) stepPhysics(cl, dt);
+      if (clusters.length > 1) solveCollisions();
+
+      for (const cl of clusters) {
+        if (!cl.shadow) continue;
+        const p = cl.group.position;
+        const bound = BOUND_R[cl.count];
+        const h = Math.max(0, p.y - (CONFIG.FLOOR_Y + bound));
+        const sc = bound * 2.4 * (1 + h * 0.1);
+        cl.shadow.position.x = p.x;
+        cl.shadow.position.z = p.z;
+        cl.shadow.scale.set(sc, sc * 0.9, 1);
+        cl.shadow.material.opacity = Math.max(0.1, 0.55 - h * 0.1);
+      }
+    }
+
+    // Floor disc fade + main shadow swap
+    const fm = floorMesh.material;
+    fm.opacity += ((gravityOn ? 1 : 0) - fm.opacity) * (1 - Math.pow(0.02, dt));
+    floorMesh.visible = fm.opacity > 0.01;
+    shadowMesh.material.opacity = 1 - fm.opacity;
+    shadowMesh.visible = shadowMesh.material.opacity > 0.02;
+
+    // Camera: dip spring on drop, smooth look target, orbit
+    camDipVel += -camDip * 30 * dt;
+    camDipVel *= Math.pow(0.02, dt);
+    camDip += camDipVel * dt * 10;
+    camLookY += ((gravityOn ? -0.9 : 0) - camLookY) * (1 - Math.pow(0.02, dt));
+
+    camDist += (targetDist - camDist) * (1 - Math.pow(0.001, dt));
+    camera.position.set(
+      Math.sin(camYaw) * Math.cos(camPitch) * camDist,
+      camLookY + Math.sin(camPitch) * camDist + camDip,
+      Math.cos(camYaw) * Math.cos(camPitch) * camDist
+    );
+    camera.lookAt(0, camLookY, 0);
+
+    renderer.render(scene, camera);
+  }
+  requestAnimationFrame(animate);
+
+  window.addEventListener('resize', () => {
+    camera.aspect = wrapEl.clientWidth / wrapEl.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(wrapEl.clientWidth, wrapEl.clientHeight);
+  });
+})();
+</script>
+</body>
+</html>

@@ -277,6 +277,29 @@ body {
   animation: badge-pulse 0.4s ease-in-out;
 }
 
+/* Watermelon toy discoverability. The melon rocks on a long loop so it
+   catches the eye without becoming a distraction, and the first-visit
+   callout pops in beside it. */
+@keyframes melon-wiggle {
+  0%, 88%, 100% { transform: rotate(0deg); }
+  91% { transform: rotate(-13deg) scale(1.12); }
+  94% { transform: rotate(11deg) scale(1.12); }
+  97% { transform: rotate(-5deg) scale(1.05); }
+}
+
+.animate-melon {
+  animation: melon-wiggle 4.5s ease-in-out infinite;
+}
+
+@keyframes callout-pop {
+  from { opacity: 0; transform: translateY(-6px) rotate(-2deg) scale(0.85); }
+  to   { opacity: 1; transform: translateY(0) rotate(-2deg) scale(1); }
+}
+
+.animate-callout {
+  animation: callout-pop 0.32s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
 /* ── Easter eggs ─────────────────────────────────────────────────────
    Small hidden touches. None are load-bearing; all are killed under
    prefers-reduced-motion. */
@@ -351,6 +374,10 @@ body {
     animation: overlay-in 0.2s ease-out both;
   }
   .animate-badge-pulse {
+    animation: none;
+  }
+  .animate-melon,
+  .animate-callout {
     animation: none;
   }
 }
