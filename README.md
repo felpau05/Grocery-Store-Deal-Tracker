@@ -6,6 +6,8 @@ A Canadian grocery-flyer deal tracker: pulls weekly flyer data for major chains,
 
 ---
 
+**Jump to:** [Overview](#overview) · [Features](#features) · [Architecture](#architecture) · [Tech stack](#tech-stack) · [Production architecture](#production-architecture) · [Design decisions](#design-decisions) · [Local development](#local-development) · [Project structure](#project-structure)
+
 ## Overview
 
 The app scrapes flyer data from the Flipp API for chains like Walmart, Metro, Loblaws, FreshCo, Food Basics, Farm Boy, Real Canadian Superstore, and Independent Grocer, scoped to a user's postal code and chosen stores. From there, users can:
@@ -77,6 +79,33 @@ The backend talks to Postgres directly via `psycopg2` (raw SQL, no ORM) and to `
 - **Backend, scraper-go, Redis, Caddy** — self-managed on a single EC2 instance via `docker-compose.prod.yml`. Caddy terminates automatic Let's Encrypt HTTPS at `grocerytracker.duckdns.org` and reverse-proxies to the backend by Compose service name (`reverse_proxy backend:8000`) — Compose's embedded DNS resolves that name to every running replica, so `docker compose up --build --scale backend=3` horizontally scales the stateless FastAPI tier (JWT auth, no server-side sessions, pooled DB connections) without touching the Caddyfile. `scraper-go` is deliberately scaled to exactly 1 (`--scale scraper-go=1`) instead — see below.
 - **Database** — Supabase-managed Postgres, free tier (500 MB).
 
+```mermaid
+flowchart LR
+    Client(["Browser"])
+    Caddy["Caddy\n(Let's Encrypt HTTPS)"]
+
+    subgraph Backend["backend — scaled, stateless"]
+        B1["backend:1"]
+        B2["backend:2"]
+        B3["backend:3"]
+    end
+
+    Scraper["scraper-go\n(exactly 1 — single-flight lock)"]
+    DB[("Postgres\n(Supabase)")]
+    Redis[("Redis")]
+
+    Client --> Caddy
+    Caddy -- "reverse_proxy backend:8000\n(Compose DNS round-robin)" --> B1
+    Caddy --> B2
+    Caddy --> B3
+    B1 & B2 & B3 --> DB
+    B1 & B2 & B3 -.-> Redis
+    Scraper --> DB
+    Scraper -.-> Redis
+```
+
+Only the backend tier scales this way — see "Splitting the scraper into Go" below for why `scraper-go` deliberately doesn't.
+
 The free-tier/single-instance constraints below aren't oversights — they're handled explicitly in code.
 
 ## Design decisions
@@ -112,7 +141,7 @@ cd frontend
 npm run dev
 
 # Full stack
-docker compose up --build
+docker compose up --build --scale backend=1 --scale scraper-go=1
 ```
 
 Copy `.env.example` to `.env` and fill in `DATABASE_URL`/`SUPABASE_PASSWORD`, `JWT_SECRET`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, `SCRAPER_SERVICE_URL`/`SCRAPER_SERVICE_TOKEN`, `REDIS_URL`, and (optionally) `RESEND_API_KEY`.
