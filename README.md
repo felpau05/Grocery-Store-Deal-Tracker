@@ -48,14 +48,12 @@ flowchart LR
     Redis[("Redis\nSETNX lock — only 1 wins per scrape")]
 
     Client --> Caddy
-    Caddy -- "reverse_proxy backend:8000\n(Compose DNS round-robin)" --> B1
-    Caddy --> BN
-    B1 & BN -- "trigger scrape" --> S1
-    B1 & BN --> SN
-    B1 & BN --> DB
-    B1 & BN -.-> Redis
-    S1 & SN --> DB
-    S1 & SN -.-> Redis
+    Caddy -- "reverse_proxy backend:8000\n(Compose DNS round-robin)" --> Backend
+    Backend -- "trigger scrape" --> ScraperGroup
+    Backend --> DB
+    Backend -.-> Redis
+    ScraperGroup --> DB
+    ScraperGroup -.-> Redis
 ```
 
 Both tiers scale the same way (`--scale backend=N`, `--scale scraper-go=N`) — see "Splitting the scraper into Go" below for why running several `scraper-go` replicas is safe even though only one of them ever scrapes at a time.
