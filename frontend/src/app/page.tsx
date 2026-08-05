@@ -15,9 +15,14 @@ import {
   type PriceUnit,
 } from "@/lib/api";
 import DealCard from "@/components/DealCard";
+import DealsSidebar from "@/components/DealsSidebar";
+import GlassCard, { NUDGE_BANNER_SURFACE } from "@/components/GlassCard";
+import MelonHero from "@/components/MelonHero";
 import Link from "next/link";
 import { useAccount } from "@/lib/account";
-import { useKonamiCode } from "@/lib/hooks";
+import { BTN_FOLLOWUP_CTA, BTN_NUDGE_CTA } from "@/lib/button";
+import { CHIP, CHIP_ACTIVE, CHIP_DISABLED_LIGHT, CHIP_QUIET_LIGHT } from "@/lib/chip";
+import { useHeroSnap, useKonamiCode } from "@/lib/hooks";
 
 const STATUSES: { id: DealStatus; label: string }[] = [
   { id: "all", label: "All" },
@@ -57,20 +62,28 @@ function Pagination({
   const pages = Array.from({ length: windowEnd - windowStart + 1 }, (_, i) => windowStart + i);
   const canNext = totalPages !== null ? page < totalPages : hasMore;
 
+  // Every control wears the header's chip shape (lib/chip) — same type,
+  // rim and press — but its OWN light variant, not CHIP_QUIET/CHIP_ACTIVE
+  // verbatim: this row sits directly on the page's own pale background,
+  // no gradient panel behind it, so a near-white glass reads better here
+  // than the dark ink glass the header needs for its coral/dark-rind
+  // backdrops. The current page keeps CHIP_ACTIVE (dark) — it's still
+  // the one that should visually pop out of its lighter siblings.
   return (
     <div className="flex items-center justify-center gap-2 py-10 flex-wrap">
       <button
         onClick={() => onPage(page - 1)}
         disabled={page === 1}
-        className="btn-brut bg-card px-3 py-1.5 text-ink text-sm font-mono font-bold disabled:opacity-30 disabled:shadow-none"
+        aria-label="Previous page"
+        className={`${CHIP} ${page === 1 ? CHIP_DISABLED_LIGHT : CHIP_QUIET_LIGHT}`}
       >
         ←
       </button>
 
       {windowStart > 1 && (
         <>
-          <button onClick={() => onPage(1)} className="px-3 py-1.5 text-sm font-mono font-bold text-ink-soft hover:text-ink transition-colors">1</button>
-          {windowStart > 2 && <span className="px-1 text-ink-soft/50 text-sm font-mono">…</span>}
+          <button onClick={() => onPage(1)} className={`${CHIP} ${CHIP_QUIET_LIGHT}`}>1</button>
+          {windowStart > 2 && <span className="px-1 text-ink-soft/60 text-[12px] font-mono font-bold">…</span>}
         </>
       )}
 
@@ -78,11 +91,8 @@ function Pagination({
         <button
           key={p}
           onClick={() => onPage(p)}
-          className={`px-3 py-1.5 text-sm font-mono font-bold border-2 transition-all ${
-            p === page
-              ? "bg-ink text-paper border-ink shadow-[2px_2px_0_var(--color-sale)]"
-              : "border-ink/25 text-ink-soft hover:border-ink hover:text-ink"
-          }`}
+          aria-current={p === page ? "page" : undefined}
+          className={`${CHIP} ${p === page ? CHIP_ACTIVE : CHIP_QUIET_LIGHT}`}
         >
           {p}
         </button>
@@ -90,8 +100,8 @@ function Pagination({
 
       {totalPages !== null && windowEnd < totalPages && (
         <>
-          {windowEnd < totalPages - 1 && <span className="px-1 text-ink-soft/50 text-sm font-mono">…</span>}
-          <button onClick={() => onPage(totalPages)} className="px-3 py-1.5 text-sm font-mono font-bold text-ink-soft hover:text-ink transition-colors">
+          {windowEnd < totalPages - 1 && <span className="px-1 text-ink-soft/60 text-[12px] font-mono font-bold">…</span>}
+          <button onClick={() => onPage(totalPages)} className={`${CHIP} ${CHIP_QUIET_LIGHT}`}>
             {totalPages}
           </button>
         </>
@@ -100,7 +110,8 @@ function Pagination({
       <button
         onClick={() => onPage(page + 1)}
         disabled={!canNext}
-        className="btn-brut bg-card px-3 py-1.5 text-ink text-sm font-mono font-bold disabled:opacity-30 disabled:shadow-none"
+        aria-label="Next page"
+        className={`${CHIP} ${!canNext ? CHIP_DISABLED_LIGHT : CHIP_QUIET_LIGHT}`}
       >
         →
       </button>
@@ -140,13 +151,20 @@ function HomeInner() {
   const { user, merchantIds, meta, scrapeStatus, loading: sessionLoading } = useAccount();
 
   const [query, setQuery] = useState(searchParams.get("q") ?? "");
-  const [category, setCategory] = useState<string | null>(searchParams.get("category"));
+  // Checked categories/stores — multi-select. `categories`/`merchants`
+  // below are the AVAILABLE options fetched from the backend, a
+  // different thing from which ones are currently checked.
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(() =>
+    (searchParams.get("categories") ?? "").split(",").filter(Boolean),
+  );
   const [categories, setCategories] = useState<string[]>([]);
   const [merchants, setMerchants] = useState<Merchant[]>([]);
-  const [merchantId, setMerchantId] = useState<number | null>(() => {
-    const m = Number(searchParams.get("merchant"));
-    return Number.isInteger(m) && m > 0 ? m : null;
-  });
+  const [selectedMerchantIds, setSelectedMerchantIds] = useState<number[]>(() =>
+    (searchParams.get("merchants") ?? "")
+      .split(",")
+      .map(Number)
+      .filter((n) => Number.isInteger(n) && n > 0),
+  );
   // Bumped to force a refetch: by the Retry button, and when a
   // background scrape finishes so fresh deals appear without a reload.
   const [reloadKey, setReloadKey] = useState(0);
@@ -200,7 +218,6 @@ function HomeInner() {
 
   // Advanced filters — status, expiry window, price range. Initialized
   // from the URL like the other filters so they're bookmarkable.
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [status, setStatus] = useState<DealStatus>(() => {
     const s = searchParams.get("status");
     return s === "active" || s === "upcoming" ? s : "all";
@@ -212,16 +229,25 @@ function HomeInner() {
   const [priceMin, setPriceMin] = useState(searchParams.get("pmin") ?? "");
   const [priceMax, setPriceMax] = useState(searchParams.get("pmax") ?? "");
 
+  // Feeds the "Filters (N)" badge on the sidebar's combined status/expiry/
+  // price-range/priced-by group.
   const advancedCount =
     (status !== "all" ? 1 : 0) +
     (expDays !== null ? 1 : 0) +
     (priceMin !== "" ? 1 : 0) +
-    (priceMax !== "" ? 1 : 0);
+    (priceMax !== "" ? 1 : 0) +
+    (priceUnits.length > 0 ? 1 : 0);
 
   // Secret: fast-typing streak flashes the search border yellow.
   const [streak, setStreak] = useState(false);
   const keyTimes = useRef<number[]>([]);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Completes a scroll off MelonHero (h-screen) onto #deals below it, or
+  // back onto the hero, rather than resting half on one and half on the
+  // other — see the hook's own comment for why this isn't plain CSS
+  // scroll-snap.
+  useHeroSnap();
 
   // Secret: Konami code makes every visible price tag pop straight, then
   // spring back — staggered 50ms per tag, via the Web Animations API.
@@ -301,21 +327,30 @@ function HomeInner() {
     prevScrapeRunning.current = scrapeRunning;
   }, [scrapeRunning, user, merchantIds, isSignedInBlocked, effectivePostal]);
 
-  // Reset to page 1 and scroll up when filters change — but NOT on plain
-  // page navigation, which would otherwise yank the user back to the top
-  // every time they click "next".
+  // Reset to page 1 when filters change — but NOT on plain page
+  // navigation, which would otherwise reset back to page 1 every time
+  // they click "next".
+  //
+  // No scroll here any more. This used to also `scrollTo({top:0})`, but
+  // that's the absolute document top — the landing hero's top, not just
+  // "top of the deals grid" — so toggling a sidebar checkbox (the
+  // sidebar is sticky/already visible while you're doing that) yanked
+  // the whole page back up past the grid into the hero. The sidebar
+  // being visible already is exactly why no scroll is needed here at
+  // all: nothing about updating the filters requires moving the
+  // viewport anywhere.
   useEffect(() => {
     setPage(1);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [query, category, merchantId, sort, sortDir, priceUnits, status, expDays, priceMin, priceMax]);
+  }, [query, selectedCategories, selectedMerchantIds, sort, sortDir, priceUnits, status, expDays, priceMin, priceMax]);
 
-  // Keep filters in the URL (?q=beef&category=meat&merchant=234) so the
-  // search is bookmarkable and survives back-navigation from /item/[id].
+  // Keep filters in the URL (?q=beef&categories=meat,dairy&merchants=1,2)
+  // so the search is bookmarkable and survives back-navigation from
+  // /item/[id].
   useEffect(() => {
     const params = new URLSearchParams();
     if (query) params.set("q", query);
-    if (category) params.set("category", category);
-    if (merchantId) params.set("merchant", String(merchantId));
+    if (selectedCategories.length > 0) params.set("categories", selectedCategories.join(","));
+    if (selectedMerchantIds.length > 0) params.set("merchants", selectedMerchantIds.join(","));
     if (status !== "all") params.set("status", status);
     if (expDays !== null) params.set("exp", String(expDays));
     if (priceMin) params.set("pmin", priceMin);
@@ -326,7 +361,7 @@ function HomeInner() {
     if (page > 1) params.set("page", String(page));
     const qs = params.toString();
     window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
-  }, [query, category, merchantId, status, expDays, priceMin, priceMax, sort, sortDir, priceUnits, page]);
+  }, [query, selectedCategories, selectedMerchantIds, status, expDays, priceMin, priceMax, sort, sortDir, priceUnits, page]);
 
   useEffect(() => {
     // Wait for the session to resolve first: until then `user` is null,
@@ -353,10 +388,11 @@ function HomeInner() {
       const max = parseFloat(priceMax);
       fetchDeals({
         q: query || undefined,
-        category: category ?? undefined,
-        merchantId: merchantId ?? undefined,
-        // Scope to the account's stores unless a single pill is active
-        merchantIds: merchantId === null ? merchantIds ?? undefined : undefined,
+        categories: selectedCategories.length > 0 ? selectedCategories : undefined,
+        // Checked stores narrow the scope; none checked = the account's
+        // full store list (or the example-data default), same fallback
+        // the old single-pill selection used.
+        merchantIds: selectedMerchantIds.length > 0 ? selectedMerchantIds : merchantIds ?? undefined,
         postalCode: effectivePostal,
         status,
         sort,
@@ -390,7 +426,7 @@ function HomeInner() {
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [sessionLoading, query, category, merchantId, merchantIds, effectivePostal, sort, sortDir, priceUnits, status, expDays, priceMin, priceMax, page, reloadKey, facetTotal, isSignedInBlocked]);
+  }, [sessionLoading, query, selectedCategories, selectedMerchantIds, merchantIds, effectivePostal, sort, sortDir, priceUnits, status, expDays, priceMin, priceMax, page, reloadKey, facetTotal, isSignedInBlocked]);
 
   // Facets: total count + per-category/per-store item counts. Independent
   // of page/sort, so it only refetches when a real filter changes.
@@ -409,9 +445,8 @@ function HomeInner() {
     const max = parseFloat(priceMax);
     fetchDealFacets({
       q: query || undefined,
-      category: category ?? undefined,
-      merchantId: merchantId ?? undefined,
-      merchantIds: merchantId === null ? merchantIds ?? undefined : undefined,
+      categories: selectedCategories.length > 0 ? selectedCategories : undefined,
+      merchantIds: selectedMerchantIds.length > 0 ? selectedMerchantIds : merchantIds ?? undefined,
       postalCode: effectivePostal,
       status,
       priceUnits: priceUnits.length > 0 ? priceUnits : undefined,
@@ -435,7 +470,7 @@ function HomeInner() {
     return () => {
       cancelled = true;
     };
-  }, [sessionLoading, query, category, merchantId, merchantIds, effectivePostal, status, priceUnits, expDays, priceMin, priceMax, reloadKey, isSignedInBlocked]);
+  }, [sessionLoading, query, selectedCategories, selectedMerchantIds, merchantIds, effectivePostal, status, priceUnits, expDays, priceMin, priceMax, reloadKey, isSignedInBlocked]);
 
   // Per-category average $/unit across visible deals, for the deal-o-meter.
   // Needs 2+ priced items in a category — comparing an item to itself is noise.
@@ -457,60 +492,115 @@ function HomeInner() {
 
   return (
     <main className="pb-16">
-      <div className="max-w-5xl mx-auto px-6 pt-12">
-        <header className="mb-8 relative">
-          <div className="halftone absolute -top-4 right-0 w-40 h-24 opacity-60 hidden sm:block" aria-hidden />
-          <span className="sticker text-[11px] text-ink mb-4">This week&apos;s flyer</span>
-          <h1 className="font-display text-5xl sm:text-6xl text-ink leading-[0.92] mt-3">
-            What&apos;s on sale{" "}
-            <span className="relative inline-block text-paper bg-sale px-2 -rotate-1">near you</span>
-          </h1>
-          <p className="text-ink-soft mt-4 max-w-lg font-medium">
-            Live deals pulled from local grocery flyers — sorted, normalized, and priced per unit so you can actually compare.
-          </p>
-        </header>
-      </div>
+      <MelonHero />
 
-      <div className="max-w-5xl mx-auto px-6 pt-2">
+      {/* scroll-mt-16 == the fixed header's h-16, so the deals land flush
+          under it instead of leaving a strip of hero showing in the gap. */}
+      {/* Two columns, filters always the left one: the sidebar is a fixed
+          280px rail and the search bar, card grid and paginator share the
+          1fr beside it. The "Slice me" melon is neither — it's `fixed`
+          bottom-right in the root layout, so it owns that corner on its
+          own, in no column at all.
+
+          `sidebar:` (globals.css) is what decides between the two
+          layouts, and it's about the shape of the screen rather than a
+          single width: any device with the room runs the rail beside the
+          cards, and one held upright falls back to a single stacked
+          column where the filters sit above the grid.
+
+          Full-bleed rather than the old `max-w-7xl mx-auto`: that kept
+          the whole grid centered in the viewport, so on anything wider
+          than 1280px the sidebar sat inset from the real left edge by
+          however much margin was on either side. Dropping the outer
+          max-width and pinning padding to `pl-4`/`pr-6` independently
+          (not the `px-6` shorthand — Tailwind v4's px-* is one
+          `padding-inline` declaration, and overriding only one side of
+          that with a `pl-*` utility at a breakpoint is exactly the kind
+          of two-declarations-fighting-over-one-property case that's a
+          coin flip on source order) means only the LEFT side shrinks at
+          the `sidebar:` breakpoint — down to a slim 16px edge margin
+          rather than 0: flush against the actual browser chrome read as
+          a layout bug, not a deliberate rail. The content column still
+          gets its own right-side breathing room and naturally takes up
+          the rest of the width as the dominant middle area, without
+          needing a second centered max-width of its own. */}
+      {/* min-h-screen for the same reason list/page.tsx's #plan has it —
+          a floor so there's always genuine room below the hero to
+          scroll into, not a targeted height. The sidebar is `sticky`
+          within this, so the extra height (on an account with very few
+          tracked deals) only ever gives it more room to stick within,
+          never breaks its layout. */}
+      <div id="deals" className="min-h-screen scroll-mt-16 pl-6 pr-6 sidebar:pl-4 pt-8 grid grid-cols-1 sidebar:grid-cols-[280px_1fr] gap-6 items-start">
+        <aside className="sidebar:sticky sidebar:top-20 sidebar:max-h-[calc(100vh-6rem)] sidebar:overflow-y-auto">
+          <DealsSidebar
+            user={user}
+            pillMerchants={pillMerchants}
+            selectedMerchantIds={selectedMerchantIds}
+            setSelectedMerchantIds={setSelectedMerchantIds}
+            merchantCounts={merchantCounts}
+            categories={categories}
+            selectedCategories={selectedCategories}
+            setSelectedCategories={setSelectedCategories}
+            categoryCounts={categoryCounts}
+            sort={sort}
+            setSort={setSort}
+            sortDir={sortDir}
+            setSortDir={setSortDir}
+            priceUnits={priceUnits}
+            setPriceUnits={setPriceUnits}
+            status={status}
+            setStatus={setStatus}
+            expDays={expDays}
+            setExpDays={setExpDays}
+            priceMin={priceMin}
+            setPriceMin={setPriceMin}
+            priceMax={priceMax}
+            setPriceMax={setPriceMax}
+            advancedCount={advancedCount}
+            onClearAdvanced={() => {
+              setStatus("active");
+              setExpDays(null);
+              setPriceUnits([]);
+              setPriceMin("");
+              setPriceMax("");
+            }}
+          />
+        </aside>
+
+        <div className="min-w-0">
         {/* Signed in but no postal code set — a real account never sees
             the example set, so the grid below is genuinely empty. Takes
             priority over the no-stores banner since picking stores
             requires a postal code first. */}
         {!sessionLoading && isSignedInNoPostal && (
-          <div className="brut bg-tag/30 px-4 py-3 mb-6 flex items-center justify-between gap-4 flex-wrap">
+          <GlassCard wrapperClassName="mb-6" surfaceClassName={NUDGE_BANNER_SURFACE}>
             <p className="text-[13px] text-ink">
               <span className="font-mono font-bold uppercase tracking-[0.1em] mr-2">No postal code yet</span>
               Your account doesn&apos;t have a postal code set, so there&apos;s nothing to show — add one to see deals near you.
             </p>
-            <Link
-              href="/settings"
-              className="btn-brut px-3.5 py-1.5 bg-sale-dark text-paper font-mono font-bold text-[12px] uppercase shrink-0"
-            >
+            <Link href="/settings" className={BTN_NUDGE_CTA}>
               Set my postal code →
             </Link>
-          </div>
+          </GlassCard>
         )}
         {/* Signed in but no stores picked yet — a real account never sees
             the example set, so the grid below is genuinely empty. */}
         {!sessionLoading && !isSignedInNoPostal && isSignedInNoStores && (
-          <div className="brut bg-tag/30 px-4 py-3 mb-6 flex items-center justify-between gap-4 flex-wrap">
+          <GlassCard wrapperClassName="mb-6" surfaceClassName={NUDGE_BANNER_SURFACE}>
             <p className="text-[13px] text-ink">
               <span className="font-mono font-bold uppercase tracking-[0.1em] mr-2">No stores yet</span>
               Your account isn&apos;t tracking any stores, so there&apos;s nothing to show — pick your stores to see deals.
             </p>
-            <Link
-              href="/settings"
-              className="btn-brut px-3.5 py-1.5 bg-sale-dark text-paper font-mono font-bold text-[12px] uppercase shrink-0"
-            >
+            <Link href="/settings" className={BTN_NUDGE_CTA}>
               Pick my stores →
             </Link>
-          </div>
+          </GlassCard>
         )}
 
         {/* Anonymous visitors browse example data for the config-default
             area — say so plainly and point at sign-up. */}
         {!sessionLoading && !user && (
-          <div className="brut bg-tag/30 px-4 py-3 mb-6 flex items-center justify-between gap-4 flex-wrap">
+          <GlassCard wrapperClassName="mb-6" surfaceClassName={NUDGE_BANNER_SURFACE}>
             <p className="text-[13px] text-ink">
               <span className="font-mono font-bold uppercase tracking-[0.1em] mr-5">
               You&apos;re seeing deals for {meta?.default_postal_code ? (
@@ -521,268 +611,51 @@ function HomeInner() {
               </span>
               {"Sign up to see the latest deals near you."}
             </p>
-            <Link
-              href="/login"
-              className="btn-brut px-3.5 py-1.5 bg-sale-dark text-paper font-mono font-bold text-[12px] uppercase shrink-0"
-            >
+            <Link href="/login" className={BTN_NUDGE_CTA}>
               Sign up →
             </Link>
-          </div>
+          </GlassCard>
         )}
 
-        <div className="relative">
+        {/* Same translucent-over-the-liquid-ring surface as DealCard and
+            the sidebar cards — see the note on GLASS_SURFACE in
+            GlassCard.tsx for why a flat colour can't reproduce this.
+            A full custom surfaceClassName, not the default — border-2
+            border-ink (not border-white/40) so search-streak's flash
+            has an element with its own border/shadow to animate. */}
+        <GlassCard
+          surfaceClassName={`relative overflow-hidden bg-card/90 backdrop-blur-md border-2 border-ink pl-10 pr-4 py-3 transition-colors ${
+            streak ? "search-streak" : ""
+          }`}
+        >
           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-ink font-bold" aria-hidden>⌕</span>
           <input
             type="text"
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
             placeholder="SEARCH: chicken, milk, pasta…"
-            className={`w-full bg-card border-2 border-ink shadow-[3px_3px_0_var(--color-ink)] pl-10 pr-4 py-3 font-mono text-sm text-ink placeholder:text-ink-soft/60 focus:bg-tag/20 outline-none transition-colors ${
-              streak ? "search-streak" : ""
-            }`}
+            className="w-full bg-transparent font-mono text-sm text-ink placeholder:text-ink-soft/60 outline-none"
           />
-        </div>
+        </GlassCard>
 
         <div className="tear-line tear-shimmer my-5" />
 
-        {pillMerchants.length > 0 && (
-          <div className="flex items-center gap-2 flex-wrap mb-3">
-            <span className="font-mono font-bold text-[10px] uppercase tracking-[0.18em] text-ink mr-1">
-              {user && user.merchants.length > 0 ? `${user.name}'s stores` : "Stores"}
+        {/* Result count + page indicator. Everything else that used to
+            live on this row is now in the sidebar. */}
+        <div className="flex items-center justify-between gap-3 mb-5 flex-wrap">
+          <span className="font-mono font-bold text-[11px] uppercase tracking-[0.12em] text-ink-soft">
+            {loading
+              ? "Loading deals…"
+              : facetTotal !== null
+                ? `${facetTotal.toLocaleString()} deal${facetTotal === 1 ? "" : "s"}`
+                : `${deals.length} deal${deals.length === 1 ? "" : "s"}`}
+          </span>
+          {!loading && !error && page > 1 && (
+            <span className="font-mono font-bold text-[11px] text-ink-soft whitespace-nowrap">
+              page {page}
             </span>
-            <button
-              onClick={() => setMerchantId(null)}
-              className={`text-[12px] font-mono font-bold px-3 py-1 border-2 transition-all ${
-                merchantId === null
-                  ? "bg-produce text-paper border-ink shadow-[2px_2px_0_var(--color-ink)]"
-                  : "border-ink/25 text-ink-soft hover:border-ink hover:text-ink"
-              }`}
-            >
-              {user && user.merchants.length > 0 ? "All my stores" : "All stores"}
-              {merchantCounts.size > 0 && (
-                <span className="opacity-70">
-                  {" "}
-                  ({[...merchantCounts.values()].reduce((a, b) => a + b, 0)})
-                </span>
-              )}
-            </button>
-            {pillMerchants.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => setMerchantId(m.id)}
-                className={`text-[12px] font-mono font-bold px-3 py-1 border-2 transition-all ${
-                  merchantId === m.id
-                    ? "bg-produce text-paper border-ink shadow-[2px_2px_0_var(--color-ink)]"
-                    : "border-ink/25 text-ink-soft hover:border-ink hover:text-ink"
-                }`}
-              >
-                {m.name}
-                {merchantCounts.has(m.id) && (
-                  <span className="opacity-70"> ({merchantCounts.get(m.id)})</span>
-                )}
-              </button>
-            ))}
-            {user && (
-              <Link
-                href="/settings"
-                className="text-[11px] font-mono font-bold text-ink-soft/70 hover:text-sale transition-colors ml-1"
-              >
-                ✎ edit
-              </Link>
-            )}
-          </div>
-        )}
-
-        <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-mono font-bold text-[10px] uppercase tracking-[0.18em] text-ink mr-1">Type</span>
-            <button
-              onClick={() => setCategory(null)}
-              className={`text-[12px] font-mono font-bold px-3 py-1 border-2 transition-all ${
-                category === null
-                  ? "bg-ink text-paper border-ink shadow-[2px_2px_0_var(--color-ink)]"
-                  : "border-ink/25 text-ink-soft hover:border-ink hover:text-ink"
-              }`}
-            >
-              All
-              {categoryCounts.size > 0 && (
-                <span className="opacity-70">
-                  {" "}
-                  ({[...categoryCounts.values()].reduce((a, b) => a + b, 0)})
-                </span>
-              )}
-            </button>
-            {categories.map((c) => (
-              <button
-                key={c}
-                onClick={() => setCategory(c)}
-                className={`text-[12px] font-mono font-bold px-3 py-1 border-2 transition-all capitalize ${
-                  category === c
-                    ? "bg-ink text-paper border-ink shadow-[2px_2px_0_var(--color-ink)]"
-                    : "border-ink/25 text-ink-soft hover:border-ink hover:text-ink"
-                }`}
-              >
-                {c}
-                {categoryCounts.has(c) && (
-                  <span className="opacity-70"> ({categoryCounts.get(c)})</span>
-                )}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2 ml-auto flex-wrap justify-end">
-            {/* Unit filter — multiselect */}
-            <div className="flex items-center gap-1">
-              {(["g", "ml", "each"] as PriceUnit[]).map((u) => {
-                const label = u === "g" ? "Weight" : u === "ml" ? "Volume" : "Qty";
-                const active = priceUnits.includes(u);
-                return (
-                  <button
-                    key={u}
-                    onClick={() =>
-                      setPriceUnits((prev) =>
-                        active ? prev.filter((x) => x !== u) : [...prev, u]
-                      )
-                    }
-                    className={`text-[11px] font-mono font-bold px-2.5 py-1 border-2 transition-all ${
-                      active
-                        ? "bg-tag border-ink text-ink shadow-[2px_2px_0_var(--color-ink)]"
-                        : "border-ink/25 text-ink-soft hover:border-ink hover:text-ink"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Sort mode + direction */}
-            <div className="flex items-center bg-card border-2 border-ink p-0.5">
-              {(["price", "price_per_unit"] as SortMode[]).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setSort(s)}
-                  className={`text-[11px] font-mono font-bold px-2.5 py-1 transition-colors whitespace-nowrap ${
-                    sort === s ? "bg-ink text-paper" : "text-ink-soft hover:text-ink"
-                  }`}
-                >
-                  {s === "price" ? "$ total" : "$/unit"}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-              title={sortDir === "asc" ? "Ascending" : "Descending"}
-              className="btn-brut bg-card px-2.5 py-1 font-mono font-bold text-[13px] text-ink"
-            >
-              {sortDir === "asc" ? "↑" : "↓"}
-            </button>
-
-            <button
-              onClick={() => setShowAdvanced((v) => !v)}
-              aria-expanded={showAdvanced}
-              className={`btn-brut px-2.5 py-1 font-mono font-bold text-[11px] uppercase ${
-                showAdvanced || advancedCount > 0 ? "bg-ink text-paper" : "bg-card text-ink"
-              }`}
-            >
-              Filters{advancedCount > 0 ? ` (${advancedCount})` : ""} {showAdvanced ? "−" : "+"}
-            </button>
-
-            {!loading && !error && page > 1 && (
-              <span className="font-mono font-bold text-[11px] text-ink-soft whitespace-nowrap">
-                page {page}
-              </span>
-            )}
-          </div>
+          )}
         </div>
-
-        {showAdvanced && (
-          <div className="brut animate-in p-4 mb-6 grid sm:grid-cols-3 gap-5">
-            {/* Deal status */}
-            <div>
-              <p className="font-mono font-bold text-[10px] uppercase tracking-[0.18em] text-ink mb-2">
-                Deal status
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {STATUSES.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => setStatus(s.id)}
-                    className={`text-[11px] font-mono font-bold px-2.5 py-1 border-2 transition-all ${
-                      status === s.id
-                        ? "bg-ink text-paper border-ink shadow-[2px_2px_0_var(--color-sale)]"
-                        : "border-ink/25 text-ink-soft hover:border-ink hover:text-ink"
-                    }`}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Expiry window */}
-            <div>
-              <p className="font-mono font-bold text-[10px] uppercase tracking-[0.18em] text-ink mb-2">
-                Expires
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {EXPIRY_OPTIONS.map((o) => (
-                  <button
-                    key={o.label}
-                    onClick={() => setExpDays(o.days)}
-                    className={`text-[11px] font-mono font-bold px-2.5 py-1 border-2 transition-all ${
-                      expDays === o.days
-                        ? "bg-sale text-paper border-ink shadow-[2px_2px_0_var(--color-ink)]"
-                        : "border-ink/25 text-ink-soft hover:border-ink hover:text-ink"
-                    }`}
-                  >
-                    {o.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Price range */}
-            <div>
-              <p className="font-mono font-bold text-[10px] uppercase tracking-[0.18em] text-ink mb-2">
-                Price range
-              </p>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  value={priceMin}
-                  onChange={(e) => setPriceMin(e.target.value)}
-                  placeholder="min $"
-                  className="w-20 bg-paper border-2 border-ink px-2 py-1 font-mono text-[12px] text-ink placeholder:text-ink-soft/60 focus:bg-tag/20 outline-none transition-colors"
-                />
-                <span className="font-mono font-bold text-ink-soft">–</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  value={priceMax}
-                  onChange={(e) => setPriceMax(e.target.value)}
-                  placeholder="max $"
-                  className="w-20 bg-paper border-2 border-ink px-2 py-1 font-mono text-[12px] text-ink placeholder:text-ink-soft/60 focus:bg-tag/20 outline-none transition-colors"
-                />
-              </div>
-              {advancedCount > 0 && (
-                <button
-                  onClick={() => {
-                    setStatus("all");
-                    setExpDays(null);
-                    setPriceMin("");
-                    setPriceMax("");
-                  }}
-                  className="mt-2.5 font-mono font-bold text-[10px] uppercase text-ink-soft/70 hover:text-sale transition-colors"
-                >
-                  ✕ Reset filters
-                </button>
-              )}
-            </div>
-          </div>
-        )}
 
         {error && (
           <div className="border-2 border-sale bg-sale/10 shadow-[4px_4px_0_var(--color-sale)] p-6 text-center">
@@ -790,10 +663,7 @@ function HomeInner() {
             <p className="text-ink-soft text-sm mt-3">
               We couldn&apos;t load deals right now — give it another try.
             </p>
-            <button
-              onClick={() => setReloadKey((k) => k + 1)}
-              className="btn-brut mt-4 px-4 py-2 bg-ink text-paper text-sm font-mono font-bold"
-            >
+            <button onClick={() => setReloadKey((k) => k + 1)} className={BTN_FOLLOWUP_CTA}>
               Retry
             </button>
           </div>
@@ -813,24 +683,32 @@ function HomeInner() {
           // Say WHY it's empty, not just that it is. A newly added store
           // has no data until its first scrape; a store-scoped search
           // isn't the same as searching everywhere.
-          const selectedPill = merchantId !== null ? pillMerchants.find((m) => m.id === merchantId) : null;
-          const filtersActive = !!query || category !== null || advancedCount > 0;
+          // Only meaningful with exactly one store checked — with several
+          // checked (or none) there's no single "this one's untracked"
+          // story to tell, so it falls through to the generic message.
+          const selectedPill =
+            selectedMerchantIds.length === 1
+              ? pillMerchants.find((m) => m.id === selectedMerchantIds[0])
+              : null;
+          const filtersActive = !!query || selectedCategories.length > 0 || advancedCount > 0;
           const pillUntracked = selectedPill && !filtersActive && !merchantCounts.has(selectedPill.id);
-          const scopedToUserStores = merchantId === null && !!merchantIds;
+          const scopedToUserStores = selectedMerchantIds.length === 0 && !!merchantIds;
 
           return (
             <div className="text-center py-14">
               <span className="stamp text-sale-dark text-lg">
                 {pillUntracked ? "No data yet" : "No deals found"}
               </span>
+              {/* No card behind any of these — raw gradient background, so
+                  --color-ink, not --color-ink-soft. */}
               {pillUntracked ? (
-                <p className="text-ink-soft mt-4 max-w-md mx-auto">
+                <p className="text-ink mt-4 max-w-md mx-auto">
                   <span className="font-bold text-ink">{selectedPill.name}</span> is new —
                   its deals arrive after its first scrape
                   {scrapeStatus?.running ? " (one is running now, hang tight)" : ""}.
                 </p>
               ) : scopedToUserStores ? (
-                <p className="text-ink-soft mt-4 max-w-md mx-auto">
+                <p className="text-ink mt-4 max-w-md mx-auto">
                   Nothing matches in <span className="font-bold text-ink">your {merchantIds?.length} stores</span>.
                   Try a broader term, or{" "}
                   <Link href="/settings" className="font-bold text-ink underline hover:text-sale transition-colors">
@@ -838,22 +716,24 @@ function HomeInner() {
                   </Link>.
                 </p>
               ) : (
-                <p className="text-ink-soft mt-4">Try a broader term, or clear the filters.</p>
+                <p className="text-ink mt-4">Try a broader term, or clear the filters.</p>
               )}
               {filtersActive && !pillUntracked && (
-                <button
+                <GlassCard
+                  as="button"
                   onClick={() => {
                     setQuery("");
-                    setCategory(null);
+                    setSelectedCategories([]);
                     setStatus("all");
                     setExpDays(null);
                     setPriceMin("");
                     setPriceMax("");
                   }}
-                  className="btn-brut mt-5 px-4 py-2 bg-card text-ink text-[12px] font-mono font-bold uppercase"
+                  wrapperClassName="inline-block mt-5"
+                  surfaceClassName="glow-btn px-4 py-2 bg-card text-ink text-[12px] font-mono font-bold uppercase"
                 >
                   ✕ Clear search &amp; filters
-                </button>
+                </GlassCard>
               )}
             </div>
           );
@@ -892,6 +772,7 @@ function HomeInner() {
             )}
           </>
         )}
+      </div>
       </div>
     </main>
   );

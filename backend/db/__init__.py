@@ -8,6 +8,14 @@ Module boundaries (locked, see HANDOFF.md):
     queries.py      all reads
 """
 
+from .cart import (
+    create_saved_plan,
+    delete_saved_plan,
+    ensure_cart_tables,
+    get_cart,
+    list_saved_plans,
+    replace_cart,
+)
 from .connection import get_conn, get_cursor
 from .items import apply_classifications, upsert_item_embedding
 from .queries import (
@@ -51,4 +59,10 @@ __all__ = [
     "update_user",
     "storage_status",
     "clear_storage_error",
+    "ensure_cart_tables",
+    "get_cart",
+    "replace_cart",
+    "list_saved_plans",
+    "create_saved_plan",
+    "delete_saved_plan",
 ]

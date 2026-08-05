@@ -5,6 +5,7 @@ import BackLink from "@/components/BackLink";
 import PriceChart from "@/components/PriceChart";
 import PriceTag from "@/components/PriceTag";
 import ImageLightbox from "@/components/ImageLightbox";
+import GlassCard, { GLASS_SURFACE_DENSE } from "@/components/GlassCard";
 
 function formatSize(size: number | null, unit: string | null): string | null {
   if (!size || !unit) return null;
@@ -15,7 +16,7 @@ function formatSize(size: number | null, unit: string | null): string | null {
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-4 py-2 border-b border-border-tan/60 last:border-0">
-      <span className="font-mono text-[11px] uppercase tracking-[0.15em] text-ink-soft/70 shrink-0">
+      <span className="font-mono text-[11px] uppercase tracking-[0.15em] text-ink-soft shrink-0">
         {label}
       </span>
       <span className="font-mono text-sm text-ink text-right">{value}</span>
@@ -59,12 +60,12 @@ export default async function ItemPage({
         {(item.product_image || item.cutout_image) && (
           <div className="flex gap-2 flex-shrink-0">
             {item.product_image && (
-              <div className="w-28 h-28 bg-card border-2 border-ink shadow-[3px_3px_0_var(--color-ink)] overflow-hidden">
+              <div className="w-28 h-28 bg-card border-2 border-ink shadow-[3px_3px_0_var(--color-shadow)] overflow-hidden">
                 <ImageLightbox src={item.product_image} alt={item.name} />
               </div>
             )}
             {item.cutout_image && item.cutout_image !== item.product_image && (
-              <div className="w-28 h-28 bg-card border-2 border-ink shadow-[3px_3px_0_var(--color-ink)] overflow-hidden">
+              <div className="w-28 h-28 bg-card border-2 border-ink shadow-[3px_3px_0_var(--color-shadow)] overflow-hidden">
                 <ImageLightbox src={item.cutout_image} alt={`${item.name} — flyer cutout`} />
               </div>
             )}
@@ -86,6 +87,7 @@ export default async function ItemPage({
         <div className="shrink-0 mt-1">
           <PriceTag
             price={item.price}
+            priceUnit={item.price_unit}
             perUnit={item.price_per_unit}
             perUnitLabel={item.price_per_unit_label}
             highConfidence={item.high_confidence}
@@ -109,7 +111,7 @@ export default async function ItemPage({
       <div className="tear-line my-6" />
 
       {/* Detail table */}
-      <section className="brut px-4 py-1 mb-6">
+      <GlassCard wrapperClassName="mb-6" surfaceClassName={`${GLASS_SURFACE_DENSE} px-4 py-1`}>
         <DetailRow
           label="Price"
           value={
@@ -145,7 +147,7 @@ export default async function ItemPage({
             )
           }
         />
-      </section>
+      </GlassCard>
 
       {/* Raw flyer data */}
       {(item.original_name || item.original_description) && (
@@ -154,13 +156,13 @@ export default async function ItemPage({
           <div className="bg-card border-2 border-ink/25 px-4 py-3 space-y-2">
             {item.original_name && item.original_name !== item.name && (
               <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-ink-soft/70 mb-0.5">Original name</p>
+                <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-ink-soft mb-0.5">Original name</p>
                 <p className="text-sm text-ink">{item.original_name}</p>
               </div>
             )}
             {item.original_description && (
               <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-ink-soft/70 mb-0.5">Description</p>
+                <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-ink-soft mb-0.5">Description</p>
                 <p className="text-sm text-ink leading-relaxed">{item.original_description}</p>
               </div>
             )}

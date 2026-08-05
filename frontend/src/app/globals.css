@@ -10,25 +10,352 @@
 /* Palette: farmers-market green. Celery paper, forest ink, one vivid
    market green doing the job red used to do, lime price stickers, and
    a carrot orange reserved for keyboard focus. */
-@theme {
-  --color-paper: #edf2e0;
-  --color-ink: #14210f;
-  --color-ink-soft: #5d6e51;
-  --color-sale: #1f8f45;
+@theme static {
+
+  /* ── App background: watermelon rind ───────────────────────────────
+     The page behind everything is the outside of the melon — a plain
+     static gradient, deliberately: the moving surfaces are the hero,
+     the header and the ring under each deal card, and the page they
+     all sit on stays still.
+
+     The three stops of the static body gradient below, ordered light →
+     deep. Three rather than the source palette's five because that
+     palette is a straight line: from→via passes through #bfeeb7
+     exactly, and via→to through ~#8fe381, so a linear ramp across
+     these three travels the whole set. */
+  /* PINK EXPERIMENT — dev-only A/B, not a design decision. Reuses
+     MelonHero's own gradient stops (--color-hero-from/via/to) verbatim,
+     so this is literally "the pink the landing page already uses,"
+     not a new colour. To go back to green: comment the 3 lines below
+     this one and uncomment the 3 GREEN (ORIGINAL) lines beneath them —
+     that's the whole revert, no need to dig through git history. */
+  --color-bg-from:  #ff9494;  /* == --color-hero-from */
+  --color-bg-via:   #ff7575;  /* == --color-hero-via */
+  --color-bg-to:    #ff3434;  /* == --color-hero-to */
+  /* GREEN (ORIGINAL) — uncomment these 3 + comment the 3 above to revert.
+  --color-bg-from:  #93c455;
+  --color-bg-via:   #93c455;
+  --color-bg-to:    #77dd66;
+  */
+
+  /* ── Deal card glow ring: watermelon flesh ─────────────────────────
+     The three stops of the flowing pink ring that peeks out from under
+     every deal card (.deal-card-glow::before below). Ordered light →
+     deep. These replaced the pink-and-orange wash the ring used to be;
+     --color-shadow-* below still drives the flat offset shadows on
+     everything else. */
+  --color-deals-from: #ffa8a8;  /* crest */
+  --color-deals-via:  #ff7575;
+  --color-deals-to:   #ff3434;  /* deep veins */
+
+
+  /* ── Page rind stripes (html::before, below the @theme block) ─────
+     The dark bands running down the page — a flat fill, no speckle.
+     Opacity is the knob to reach for first: 1 is the full-strength
+     pattern from the reference, lower lets the field show through so
+     the stripes sit behind content rather than competing with it. */
+  --color-rind-stripe: #2b7a2e;
+  /* PINK EXPERIMENT — the hero itself (MelonHero) is a plain gradient
+     wash with no stripe pattern at all, so matching it means no
+     stripes, not pink ones. Opacity 0 hides the whole stripe layer
+     without touching PageLiquid/html::before — the field gradient above
+     is all that's left showing. Revert: 0 → 0.55. */
+  --rind-stripe-opacity:    0;
+  /* ORIGINAL: --rind-stripe-opacity: 0.55; */
+
+  --color-ink:        #111111; /* Near-black for crisp, aggressive brutalist lines */
+  /* Darkened from #6b6b6b: that shade blended over the coral page
+     background (behind a /90-opacity glass card, worst-case gradient
+     stop) measured ~3.5:1 against WCAG AA's 4.5:1 floor — this shade
+     clears it at ~5.8–6.2:1 on both glass surface tiers while still
+     reading as visibly softer than --color-ink. Never use this with an
+     opacity suffix (text-ink-soft/70 etc.) on a surface over the page
+     gradient — the glyph alpha blends toward the same backdrop it's
+     judged against, so darkening the base token can't compensate; drop
+     the suffix instead. */
+  --color-ink-soft:   #545454; /* Clean neutral grey for secondary text */
+  --color-border-tan: #e5e5e5;
+  /* Primary buttons/CTAs — one shade darker than the palette's own
+     darkest green (#66b466, color-hex.com/color-palette/1026262),
+     same hue family. #66b466 alone measures ~2.5:1 contrast against
+     the white button text used here — under WCAG's 3:1 floor even for
+     bold/large text. #4c874c restores it to ~4.3:1. */
+  --color-sale: #4c874c;
   --color-sale-dark: #14672c;
-  --color-produce: #1d5c3a;
-  --color-tag: #c6e14b;
+  /* Selected filter pills / active states — extends the same green
+     palette family one step darker than --color-sale (#4c874c), so
+     they read as a genuinely different, more emphasized shade rather
+     than duplicating the CTA button color. ~6.8:1 contrast with white
+     text, well past the CTA buttons' ~4.3:1. */
+  --color-produce: #396539;
+  --color-tag:  	#73d073;
   --color-pop: #e0762b;
-  --color-border-tan: #b9c9a3;
-  --color-card: #f7faf0;
+  /* Card background — lightest of the blue palette
+     (color-hex.com/color-palette/1071680). Still near-white, so every
+     card's existing text-ink content stays readable. */
+  --color-card:       #e2f4e2;
+
+  /* Restored — 14 files (buttons, badges, the cart drawer, price tags,
+     toasts, error pages) still use text-paper/bg-paper for light-on-dark
+     contrast. body no longer needs it (see the gradient below), but
+     removing the token broke those utilities silently rather than
+     erroring, since a missing @theme variable just stops generating the
+     class instead of failing the build. */
+  --color-paper: #ffffff;
+  --color-header:  	#bff8bf;
+
+  /* ── Custom Header Gradient Colors ────────────────────────── */
+  --color-header-from: #228B22;  /* Deep rind */
+  --color-header-via:  #008000;  /* Light stripe */
+  --color-header-to:    	#006400; /* Mid rind */
+
+
+  /* ── Hero ──────────────────────────────────────────────────────────
+     The three stops of the radial gradient behind the 3D melon, centre
+     outward. Keep `via` as var(--color-paper) if you want the hero to
+     follow the page background automatically; override it with a hex to
+     decouple them (e.g. a green hero on an orange page). */
+  --color-hero-from: #ff9494;
+  --color-hero-via: #ff7575;
+  --color-hero-to:  #ff3434;
+
+  /* Landing-page hero text. These only affect MelonHero — change them
+     freely without touching the rest of the app.
+
+     No title/accent tokens here any more: the heading now matches
+     TripIntro's treatment on /list exactly (plain white, one clamp-sized
+     line, a soft shadow) rather than the old hard-offset "you" accent
+     block, so there's nothing left for either of those to tune. */
+  --color-hero-body: var(--color-ink);           /* paragraph */
+  --color-hero-eyebrow: var(--color-tag);        /* badge background */
+  --color-hero-eyebrow-ink: var(--color-ink);    /* badge text */
+  /* Both dormant: the CTA wears the site header's chip now (lib/chip.ts),
+     which brings its own ink-glass fill and paper text so neither token
+     is read. Kept rather than deleted — they're what you'd reach for to
+     give the CTA a bespoke colour again. */
+  --color-hero-cta: var(--color-sale);           /* unused — see above */
+  --color-hero-cta-ink: #FFFFFF;      /* unused — see above */
+  --color-hero-hint: var(--color-ink);           /* "drag to spin" line */
+
+  /* ── Header rind (HeaderLiquid) ────────────────────────────────────
+     Watermelon skin behind the site header: a pale mottled field with
+     dark, torn-edged stripes wandering across it. Same hex-only rule as
+     the trip stops below — the shader parses these literally.
+
+     `pale`/`light` are the field between stripes, `dark`/`deep` are the
+     stripes and their vein cores. The static gradient in SiteHeader is
+     the fallback when WebGL is off. */
+  --color-header-rind-pale:  #93c455;  /* field between the stripes */
+  --color-header-rind-light: #b2d97e;  /* mottling within that field */
+  --color-header-rind-dark:  #2b7a2e;  /* the stripes */
+  --color-header-rind-deep:  #14521c;  /* vein cores, and the scrim below */
+
+  /* Mixes the whole pattern toward `deep`. 0 is photo-accurate rind, 1
+     is flat dark green with the stripe lost entirely.
+
+     It can sit this low only because the stripe is pinned under the
+     header text (see the small `wander` in HeaderLiquid). That puts
+     white text on dark rind wherever text actually is, measured at
+     ~5:1 here — past WCAG AA's 4.5:1 — while the pale field is left
+     alone above and below it, where nothing has to stay readable.
+     Widen `wander` or move the text off-centre and this has to go back
+     up to ~0.7 to compensate. */
+  --header-rind-scrim: 0.18;
+
+  /* ── Plan-a-trip intro (TripIntro) ─────────────────────────────────
+     The five stops of the liquid gradient on /list. Change them here —
+     the WebGL shader reads these at startup and the static CSS fallback
+     gradient uses them directly, so both follow.
+
+     Must be plain 3- or 6-digit hex: the shader parses the literal into
+     floats, so a var() chain or any color function (oklch(), rgb(), …)
+     won't resolve and it falls back to the hardcoded default in
+     TripIntro.tsx. Changes need a refresh, not just a repaint — they're
+     read once when the canvas boots. */
+  --color-trip-pink:   #ff5c8f;  /* flesh */
+  --color-trip-red:    #e6214a;  /* deep flesh */
+  --color-trip-green:  #2ea36b;  /* rind */
+  --color-trip-lime:   #7dd957;  /* rind stripe */
+  --color-trip-orange: #ff8a3d;  /* woven through the folds */
+
+  /* ── Accents ───────────────────────────────────────────────────────
+     Not used by the brutalist components — these exist for the hero,
+     CTAs and any new surfaces you build. Named after the fruit so the
+     role stays obvious when the hex changes. */
+  --color-melon: #ff4d5e;        /* flesh pink — CTAs, "hot deal" */
+  --color-melon-deep: #f7203b;   /* pressed / darker melon */
+  --color-citrus: #ffc93f;       /* eyebrow badges, highlights */
+  --color-rind: #2d7a52;         /* mid green */
+  --color-rind-deep: #123724;    /* darkest green — deep backgrounds */
 
   --font-display: var(--font-archivo), "Arial Black", "Helvetica Neue", sans-serif;
   --font-body: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-spacemono), ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* System serif for the header wordmark — no web font load needed,
+     Georgia/Palatino ship pre-installed on macOS/Windows. */
+  --font-serif: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+
+  /* Header logo text color — separate from --color-ink so it can be
+     tuned without affecting the rest of the header's text. */
+  --color-logo-text: #ffffff;
+
+  /* ── PriceTag ──────────────────────────────────────────────────────
+     The price-gun sticker on every deal card. Every piece gets its own
+     knob instead of pulling from --color-ink/--color-tag/--color-paper
+     (shared with dozens of unrelated things app-wide) — tune the
+     sticker without any of those spilling over elsewhere, or vice versa.
+     All default to the same shared tokens they used before, so nothing
+     changes visually until you edit one. */
+  --color-price-tag-bg:      var(--color-tag);    /* sticker background */
+  --color-price-tag-outline: var(--color-ink);    /* die-cut outline + punch-hole ring */
+  --color-price-tag-hole:    var(--color-paper);  /* the punch-hole itself */
+  --color-price-tag-price:   #ffffff;    /* "$4.99" */
+  --color-price-tag-unit:    #ffffff;    /* "$2.50/kg" — used at 70% opacity */
+  --color-price-tag-approx:  #ffffff;    /* "~" prefix + "approx." — used at 60% opacity */
+
+  /* ── "Slice me" corner tag (MelonCorner) ──────────────────────────
+     The label strip under the spinning melon in the bottom-right
+     corner. Its own knobs rather than the shared --color-tag/--color-ink
+     it used to borrow, so you can tune this one small thing against the
+     warm orange panel above it without dragging price stickers and a
+     dozen other surfaces along with it.
+
+     The strip is a circular gradient in the same orange family as the
+     panel above it, so the tag reads as one warm object rather than a
+     coloured bar bolted under a picture. The three stops mirror the
+     panel's first three by default — keep them in step, or pull them
+     apart here if you want the strip to separate from the melon. */
+  --color-slice-bg-from: #ff9f4a;  /* centre — lightest #ffd66b*/
+  --color-slice-bg-via:  #ff9f4a;   /* #ff9f4a*/
+  --color-slice-bg-to:   #ff6b6b;;  /* outer edge #ff6b6b */
+  /* Warm near-black, NOT white — the strip is light now, and white over
+     these hues lands between 1.1:1 and 2.0:1, i.e. unreadable. This is
+     the same brown as the melon's own seed band and holds ≥4.9:1 against
+     every stop above. The type is 9px, so there's no headroom to give
+     away: if you lighten the strip further, check the ink against the
+     DARKEST stop, and if you darken it, flip this back to #ffffff. */
+  --color-slice-ink:     #ffffff;  /* "Slice me →" #3d2916*/
+  --color-slice-outline: var(--color-ink);  /* border around the whole box */
+  /* The panel the melon spins in, behind the iframe. Warm by design —
+     it's the one place in the app that isn't green. */
+  --color-slice-panel-from: #fff3c4;
+  --color-slice-panel-via:  #ffd66b;
+  --color-slice-panel-mid:  #ff9f4a;
+  --color-slice-panel-to:   #ff6b6b;
+
+  /* Flat offset-shadow token, orange/pink family. No longer backs any
+     card or standalone button — those now wear the animated LiquidGlow
+     ring (.deal-card-glow + <LiquidGlow/>, via GlassCard) or the plain
+     black .btn-brut-ink/.glow-btn treatment instead. What's left is a
+     short, deliberate list of flat decorative/utility shadows that
+     were never meant to glow: toggleChip()'s 2px selected-state
+     shadow, PriceChart's frame, item-detail's product-image frames,
+     MelonCorner's corner tag, and list.tsx's unmatched-items box.
+     Borders/outlines are untouched either way — --color-ink still owns
+     those. */
+  --color-shadow-from: #ff2d6a;
+  --color-shadow-via:  #ff5a00;
+  --color-shadow-to:   #ff9100;
+  --color-shadow: var(--color-shadow-to);
+}
+
+/* ── `sidebar:` variant ──────────────────────────────────────────────
+   When the deals page has room for the filter rail on the LEFT and the
+   cards beside it, rather than the rail stacked on top of them.
+
+   Two conditions, either one qualifying:
+     · ≥1024px — big enough that it doesn't matter how the screen is
+       turned, including a rotated/portrait desktop monitor.
+     · ≥768px AND landscape — tablets and large phones held sideways,
+       where 280px of rail still leaves a workable grid.
+
+   The orientation half is what keeps a tablet held UPRIGHT stacked: an
+   iPad portrait is 820px wide, past the 768 floor, and a 280px rail
+   there would squeeze the cards to about one narrow column. Held
+   sideways the same device is 1180px and comfortably fits both. */
+@custom-variant sidebar {
+  @media (min-width: 1024px), (min-width: 768px) and (orientation: landscape) {
+    @slot;
+  }
+}
+
+html {
+  /* Makes the hero's "See today's deals ↓" anchor glide instead of jump.
+     Overridden automatically for prefers-reduced-motion below. */
+  scroll-behavior: smooth;
+}
+
+/* ── Page background: watermelon rind, striped ───────────────────────
+   Two layers, and they live on `html` rather than `body` on purpose.
+
+   The field (the pale green between stripes) is html's own background,
+   so it still propagates to the canvas and covers the full scroll
+   height. The dark stripes are html::before — a fixed, full-viewport
+   layer at z-index -1, which paints AFTER html's background but BEFORE
+   any of body's content. Put the stripes on body::before instead and
+   body's background would paint over them; give body a background at
+   all and it covers the stripes. That's why body has none.
+
+   The stripe shape is a generated SVG used as a MASK, not as a coloured
+   image: a data URI is opaque to var(), so baking the greens into the
+   SVG would strand them outside the palette. As a mask, the colour is
+   an ordinary CSS property underneath and stays a token.
+
+   The tile is seamless in both directions — every edge wave is a sum of
+   sines at whole-number cycles over the tile height, and stripes that
+   cross the tile edge are drawn again on the far side. */
+html {
+  background-color: var(--color-bg-via);
+  /* PINK EXPERIMENT: radial, matching MelonHero's own static gradient
+     shape (`ellipse at 50% 25%`) exactly — same centre-out shape as the
+     hero, not just the same colours. Revert: comment this block, use
+     the LINEAR (ORIGINAL) one below instead. */
+  background-image: radial-gradient(
+    ellipse at 50% 25%,
+    var(--color-bg-from) 0%,
+    var(--color-bg-via) 45%,
+    var(--color-bg-to) 100%
+  );
+  /* LINEAR (ORIGINAL):
+  background-image: linear-gradient(
+    135deg,
+    var(--color-bg-from),
+    var(--color-bg-via),
+    var(--color-bg-to)
+  );
+  */
+  background-attachment: fixed;
+}
+
+/* Guarded: without mask support this pseudo-element would be a solid
+   dark-green sheet across the whole page rather than stripes, so it
+   is better to have no pattern at all than that. */
+@supports ((-webkit-mask-image: none) or (mask-image: none)) {
+html::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: var(--rind-stripe-opacity);
+  /* Flat fill — no speckle. This used to carry a radial-gradient dot
+     pattern clipped to the stripes by the mask below (the same "mix
+     toward deep" idea HeaderLiquid's shader uses); removed on request,
+     leaving the stripes solid var(--color-rind-stripe). */
+  background-color: var(--color-rind-stripe);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='420' viewBox='0 0 240 420'%3E%3Cg fill='%23fff'%3E%3Cpath d='M12.6,0.0 L13.0,6.6 L12.6,13.1 L12.4,19.7 L13.2,26.2 L14.2,32.8 L13.6,39.4 L11.7,45.9 L10.1,52.5 L10.4,59.1 L12.2,65.6 L13.9,72.2 L15.0,78.8 L16.1,85.3 L18.0,91.9 L19.5,98.4 L19.3,105.0 L17.8,111.6 L16.8,118.1 L17.5,124.7 L18.8,131.2 L19.2,137.8 L18.2,144.4 L17.0,150.9 L16.2,157.5 L15.0,164.1 L12.5,170.6 L9.6,177.2 L8.2,183.8 L8.9,190.3 L10.4,196.9 L10.8,203.4 L10.2,210.0 L9.8,216.6 L10.2,223.1 L10.4,229.7 L9.6,236.2 L8.6,242.8 L9.2,249.4 L11.1,255.9 L12.7,262.5 L12.4,269.1 L10.6,275.6 L8.9,282.2 L7.8,288.8 L6.7,295.3 L4.8,301.9 L3.3,308.4 L3.5,315.0 L5.0,321.6 L6.0,328.1 L5.3,334.7 L4.0,341.2 L3.6,347.8 L4.6,354.4 L5.8,360.9 L6.6,367.5 L7.8,374.1 L10.3,380.6 L13.2,387.2 L14.6,393.8 L13.9,400.3 L12.4,406.9 L12.0,413.4 L12.6,420.0 L44.9,420.0 L44.3,413.4 L44.0,406.9 L45.3,400.3 L47.5,393.8 L48.7,387.2 L47.6,380.6 L45.4,374.1 L43.6,367.5 L42.5,360.9 L41.1,354.4 L39.0,347.8 L37.6,341.2 L37.7,334.7 L38.6,328.1 L38.3,321.6 L36.4,315.0 L34.3,308.4 L33.7,301.9 L34.3,295.3 L35.1,288.8 L35.5,282.2 L36.5,275.6 L38.6,269.1 L40.7,262.5 L41.0,255.9 L39.4,249.4 L37.8,242.8 L37.7,236.2 L38.4,229.7 L38.6,223.1 L38.1,216.6 L37.9,210.0 L38.5,203.4 L38.8,196.9 L37.5,190.3 L35.3,183.8 L34.1,177.2 L35.2,170.6 L37.4,164.1 L39.2,157.5 L40.3,150.9 L41.7,144.4 L43.8,137.8 L45.2,131.2 L45.1,124.7 L44.2,118.1 L44.5,111.6 L46.4,105.0 L48.5,98.4 L49.1,91.9 L48.5,85.3 L47.7,78.8 L47.3,72.2 L46.3,65.6 L44.2,59.1 L42.1,52.5 L41.8,45.9 L43.4,39.4 L45.0,32.8 L45.1,26.2 L44.4,19.7 L44.2,13.1 L44.7,6.6 L44.9,0.0 Z'/%3E%3Cpath d='M252.6,0.0 L253.0,6.6 L252.6,13.1 L252.4,19.7 L253.2,26.2 L254.2,32.8 L253.6,39.4 L251.7,45.9 L250.1,52.5 L250.4,59.1 L252.2,65.6 L253.9,72.2 L255.0,78.8 L256.1,85.3 L258.0,91.9 L259.5,98.4 L259.3,105.0 L257.8,111.6 L256.8,118.1 L257.5,124.7 L258.8,131.2 L259.2,137.8 L258.2,144.4 L257.0,150.9 L256.2,157.5 L255.0,164.1 L252.5,170.6 L249.6,177.2 L248.2,183.8 L248.9,190.3 L250.4,196.9 L250.8,203.4 L250.2,210.0 L249.8,216.6 L250.2,223.1 L250.4,229.7 L249.6,236.2 L248.6,242.8 L249.2,249.4 L251.1,255.9 L252.7,262.5 L252.4,269.1 L250.6,275.6 L248.9,282.2 L247.8,288.8 L246.7,295.3 L244.8,301.9 L243.3,308.4 L243.5,315.0 L245.0,321.6 L246.0,328.1 L245.3,334.7 L244.0,341.2 L243.6,347.8 L244.6,354.4 L245.8,360.9 L246.6,367.5 L247.8,374.1 L250.3,380.6 L253.2,387.2 L254.6,393.8 L253.9,400.3 L252.4,406.9 L252.0,413.4 L252.6,420.0 L284.9,420.0 L284.3,413.4 L284.0,406.9 L285.3,400.3 L287.5,393.8 L288.7,387.2 L287.6,380.6 L285.4,374.1 L283.6,367.5 L282.5,360.9 L281.1,354.4 L279.0,347.8 L277.6,341.2 L277.7,334.7 L278.6,328.1 L278.3,321.6 L276.4,315.0 L274.3,308.4 L273.7,301.9 L274.3,295.3 L275.1,288.8 L275.5,282.2 L276.5,275.6 L278.6,269.1 L280.7,262.5 L281.0,255.9 L279.4,249.4 L277.8,242.8 L277.7,236.2 L278.4,229.7 L278.6,223.1 L278.1,216.6 L277.9,210.0 L278.5,203.4 L278.8,196.9 L277.5,190.3 L275.3,183.8 L274.1,177.2 L275.2,170.6 L277.4,164.1 L279.2,157.5 L280.3,150.9 L281.7,144.4 L283.8,137.8 L285.2,131.2 L285.1,124.7 L284.2,118.1 L284.5,111.6 L286.4,105.0 L288.5,98.4 L289.1,91.9 L288.5,85.3 L287.7,78.8 L287.3,72.2 L286.3,65.6 L284.2,59.1 L282.1,52.5 L281.8,45.9 L283.4,39.4 L285.0,32.8 L285.1,26.2 L284.4,19.7 L284.2,13.1 L284.7,6.6 L284.9,0.0 Z'/%3E%3Cpath d='M71.0,0.0 L71.7,6.6 L71.9,13.1 L71.5,19.7 L71.5,26.2 L72.7,32.8 L74.0,39.4 L73.7,45.9 L71.6,52.5 L69.5,59.1 L69.0,65.6 L69.7,72.2 L70.4,78.8 L70.8,85.3 L72.1,91.9 L74.5,98.4 L76.8,105.0 L77.4,111.6 L76.6,118.1 L76.3,124.7 L77.7,131.2 L79.8,137.8 L81.1,144.4 L81.4,150.9 L81.9,157.5 L82.6,164.1 L82.5,170.6 L80.5,177.2 L77.6,183.8 L75.8,190.3 L75.9,196.9 L76.7,203.4 L76.8,210.0 L76.1,216.6 L75.9,223.1 L76.3,229.7 L76.3,236.2 L75.1,242.8 L73.8,249.4 L74.1,255.9 L76.2,262.5 L78.3,269.1 L78.8,275.6 L78.1,282.2 L77.4,288.8 L77.0,295.3 L75.7,301.9 L73.3,308.4 L71.0,315.0 L70.4,321.6 L71.2,328.1 L71.5,334.7 L70.1,341.2 L68.0,347.8 L66.7,354.4 L66.4,360.9 L65.9,367.5 L65.2,374.1 L65.3,380.6 L67.3,387.2 L70.2,393.8 L72.0,400.3 L71.9,406.9 L71.1,413.4 L71.0,420.0 L99.0,420.0 L98.5,413.4 L99.2,406.9 L100.4,400.3 L100.5,393.8 L98.4,387.2 L95.3,380.6 L93.2,374.1 L92.4,367.5 L91.9,360.9 L91.0,354.4 L90.5,347.8 L91.5,341.2 L93.1,334.7 L93.5,328.1 L92.5,321.6 L91.3,315.0 L91.9,308.4 L93.9,301.9 L95.8,295.3 L97.0,288.8 L98.0,282.2 L99.7,275.6 L101.1,269.1 L100.7,262.5 L98.7,255.9 L97.0,249.4 L96.9,242.8 L98.1,236.2 L98.7,229.7 L98.5,223.1 L98.2,216.6 L98.8,210.0 L99.3,203.4 L98.6,196.9 L97.4,190.3 L97.3,183.8 L99.4,177.2 L102.5,170.6 L104.6,164.1 L105.4,157.5 L105.9,150.9 L106.8,144.4 L107.3,137.8 L106.3,131.2 L104.7,124.7 L104.3,118.1 L105.3,111.6 L106.5,105.0 L105.9,98.4 L103.9,91.9 L102.0,85.3 L100.8,78.8 L99.8,72.2 L98.1,65.6 L96.7,59.1 L97.1,52.5 L99.1,45.9 L100.8,39.4 L100.9,32.8 L99.7,26.2 L99.1,19.7 L99.3,13.1 L99.6,6.6 L99.0,0.0 Z'/%3E%3Cpath d='M128.7,0.0 L129.4,6.6 L129.3,13.1 L128.9,19.7 L129.4,26.2 L130.7,32.8 L131.3,39.4 L130.0,45.9 L127.7,52.5 L126.5,59.1 L127.1,65.6 L128.5,72.2 L129.5,78.8 L130.5,85.3 L132.3,91.9 L134.7,98.4 L136.1,105.0 L135.7,111.6 L134.7,118.1 L134.8,124.7 L136.5,131.2 L138.1,137.8 L138.4,144.4 L138.0,150.9 L137.9,157.5 L137.7,164.1 L136.3,170.6 L133.5,177.2 L130.7,183.8 L129.9,190.3 L130.8,196.9 L131.6,203.4 L131.3,210.0 L130.6,216.6 L130.7,223.1 L131.1,229.7 L130.6,236.2 L129.3,242.8 L128.7,249.4 L130.0,255.9 L132.3,262.5 L133.5,269.1 L132.9,275.6 L131.5,282.2 L130.5,288.8 L129.5,295.3 L127.7,301.9 L125.3,308.4 L123.9,315.0 L124.3,321.6 L125.3,328.1 L125.2,334.7 L123.5,341.2 L121.9,347.8 L121.6,354.4 L122.0,360.9 L122.1,367.5 L122.3,374.1 L123.7,380.6 L126.5,387.2 L129.3,393.8 L130.1,400.3 L129.2,406.9 L128.4,413.4 L128.7,420.0 L160.0,420.0 L159.3,413.4 L159.6,406.9 L161.1,400.3 L162.3,393.8 L161.5,387.2 L158.9,380.6 L156.3,374.1 L154.9,367.5 L153.9,360.9 L152.5,354.4 L151.1,347.8 L151.0,341.2 L152.1,334.7 L152.9,328.1 L152.1,321.6 L150.3,315.0 L149.5,308.4 L150.5,301.9 L152.2,295.3 L153.3,288.8 L154.2,282.2 L155.9,275.6 L158.0,269.1 L158.9,262.5 L157.7,255.9 L155.6,249.4 L154.8,242.8 L155.4,236.2 L156.3,229.7 L156.2,223.1 L155.8,216.6 L156.0,210.0 L156.7,203.4 L156.4,196.9 L154.9,190.3 L153.7,183.8 L154.5,177.2 L157.1,170.6 L159.7,164.1 L161.1,157.5 L162.1,150.9 L163.5,144.4 L164.9,137.8 L165.0,131.2 L163.9,124.7 L163.1,118.1 L163.9,111.6 L165.7,105.0 L166.5,98.4 L165.5,91.9 L163.8,85.3 L162.7,78.8 L161.8,72.2 L160.1,65.6 L158.0,59.1 L157.1,52.5 L158.3,45.9 L160.4,39.4 L161.2,32.8 L160.6,26.2 L159.7,19.7 L159.8,13.1 L160.2,6.6 L160.0,0.0 Z'/%3E%3Cpath d='M193.1,0.0 L193.6,6.6 L193.3,13.1 L193.1,19.7 L193.8,26.2 L194.9,32.8 L194.6,39.4 L192.7,45.9 L190.9,52.5 L190.8,59.1 L192.5,65.6 L194.2,72.2 L195.2,78.8 L196.4,85.3 L198.3,91.9 L200.1,98.4 L200.3,105.0 L199.0,111.6 L197.9,118.1 L198.5,124.7 L200.0,131.2 L200.7,137.8 L200.0,144.4 L198.9,150.9 L198.2,157.5 L197.2,164.1 L194.9,170.6 L191.9,177.2 L190.1,183.8 L190.5,190.3 L191.9,196.9 L192.4,203.4 L191.9,210.0 L191.4,216.6 L191.7,223.1 L191.9,229.7 L191.2,236.2 L190.1,242.8 L190.4,249.4 L192.3,255.9 L194.1,262.5 L194.2,269.1 L192.5,275.6 L190.8,282.2 L189.8,288.8 L188.6,295.3 L186.7,301.9 L184.9,308.4 L184.7,315.0 L186.0,321.6 L187.1,328.1 L186.5,334.7 L185.0,341.2 L184.3,347.8 L185.0,354.4 L186.1,360.9 L186.8,367.5 L187.8,374.1 L190.1,380.6 L193.1,387.2 L194.9,393.8 L194.5,400.3 L193.1,406.9 L192.6,413.4 L193.1,420.0 L218.8,420.0 L218.1,413.4 L218.0,406.9 L219.4,400.3 L221.4,393.8 L222.1,387.2 L220.7,380.6 L218.3,374.1 L216.5,367.5 L215.4,360.9 L213.9,354.4 L211.9,347.8 L210.8,341.2 L211.1,334.7 L212.0,328.1 L211.6,321.6 L209.6,315.0 L207.8,308.4 L207.5,301.9 L208.4,295.3 L209.3,288.8 L209.8,282.2 L211.1,275.6 L213.3,269.1 L215.1,262.5 L215.1,255.9 L213.3,249.4 L211.9,242.8 L211.9,236.2 L212.7,229.7 L212.8,223.1 L212.3,216.6 L212.2,210.0 L212.9,203.4 L213.0,196.9 L211.6,190.3 L209.6,183.8 L208.9,177.2 L210.3,170.6 L212.7,164.1 L214.5,157.5 L215.6,150.9 L217.1,144.4 L219.1,137.8 L220.2,131.2 L219.9,124.7 L219.0,118.1 L219.4,111.6 L221.4,105.0 L223.2,98.4 L223.5,91.9 L222.6,85.3 L221.7,78.8 L221.2,72.2 L219.9,65.6 L217.7,59.1 L215.9,52.5 L215.9,45.9 L217.7,39.4 L219.1,32.8 L219.1,26.2 L218.3,19.7 L218.2,13.1 L218.7,6.6 L218.8,0.0 Z'/%3E%3C/g%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='420' viewBox='0 0 240 420'%3E%3Cg fill='%23fff'%3E%3Cpath d='M12.6,0.0 L13.0,6.6 L12.6,13.1 L12.4,19.7 L13.2,26.2 L14.2,32.8 L13.6,39.4 L11.7,45.9 L10.1,52.5 L10.4,59.1 L12.2,65.6 L13.9,72.2 L15.0,78.8 L16.1,85.3 L18.0,91.9 L19.5,98.4 L19.3,105.0 L17.8,111.6 L16.8,118.1 L17.5,124.7 L18.8,131.2 L19.2,137.8 L18.2,144.4 L17.0,150.9 L16.2,157.5 L15.0,164.1 L12.5,170.6 L9.6,177.2 L8.2,183.8 L8.9,190.3 L10.4,196.9 L10.8,203.4 L10.2,210.0 L9.8,216.6 L10.2,223.1 L10.4,229.7 L9.6,236.2 L8.6,242.8 L9.2,249.4 L11.1,255.9 L12.7,262.5 L12.4,269.1 L10.6,275.6 L8.9,282.2 L7.8,288.8 L6.7,295.3 L4.8,301.9 L3.3,308.4 L3.5,315.0 L5.0,321.6 L6.0,328.1 L5.3,334.7 L4.0,341.2 L3.6,347.8 L4.6,354.4 L5.8,360.9 L6.6,367.5 L7.8,374.1 L10.3,380.6 L13.2,387.2 L14.6,393.8 L13.9,400.3 L12.4,406.9 L12.0,413.4 L12.6,420.0 L44.9,420.0 L44.3,413.4 L44.0,406.9 L45.3,400.3 L47.5,393.8 L48.7,387.2 L47.6,380.6 L45.4,374.1 L43.6,367.5 L42.5,360.9 L41.1,354.4 L39.0,347.8 L37.6,341.2 L37.7,334.7 L38.6,328.1 L38.3,321.6 L36.4,315.0 L34.3,308.4 L33.7,301.9 L34.3,295.3 L35.1,288.8 L35.5,282.2 L36.5,275.6 L38.6,269.1 L40.7,262.5 L41.0,255.9 L39.4,249.4 L37.8,242.8 L37.7,236.2 L38.4,229.7 L38.6,223.1 L38.1,216.6 L37.9,210.0 L38.5,203.4 L38.8,196.9 L37.5,190.3 L35.3,183.8 L34.1,177.2 L35.2,170.6 L37.4,164.1 L39.2,157.5 L40.3,150.9 L41.7,144.4 L43.8,137.8 L45.2,131.2 L45.1,124.7 L44.2,118.1 L44.5,111.6 L46.4,105.0 L48.5,98.4 L49.1,91.9 L48.5,85.3 L47.7,78.8 L47.3,72.2 L46.3,65.6 L44.2,59.1 L42.1,52.5 L41.8,45.9 L43.4,39.4 L45.0,32.8 L45.1,26.2 L44.4,19.7 L44.2,13.1 L44.7,6.6 L44.9,0.0 Z'/%3E%3Cpath d='M252.6,0.0 L253.0,6.6 L252.6,13.1 L252.4,19.7 L253.2,26.2 L254.2,32.8 L253.6,39.4 L251.7,45.9 L250.1,52.5 L250.4,59.1 L252.2,65.6 L253.9,72.2 L255.0,78.8 L256.1,85.3 L258.0,91.9 L259.5,98.4 L259.3,105.0 L257.8,111.6 L256.8,118.1 L257.5,124.7 L258.8,131.2 L259.2,137.8 L258.2,144.4 L257.0,150.9 L256.2,157.5 L255.0,164.1 L252.5,170.6 L249.6,177.2 L248.2,183.8 L248.9,190.3 L250.4,196.9 L250.8,203.4 L250.2,210.0 L249.8,216.6 L250.2,223.1 L250.4,229.7 L249.6,236.2 L248.6,242.8 L249.2,249.4 L251.1,255.9 L252.7,262.5 L252.4,269.1 L250.6,275.6 L248.9,282.2 L247.8,288.8 L246.7,295.3 L244.8,301.9 L243.3,308.4 L243.5,315.0 L245.0,321.6 L246.0,328.1 L245.3,334.7 L244.0,341.2 L243.6,347.8 L244.6,354.4 L245.8,360.9 L246.6,367.5 L247.8,374.1 L250.3,380.6 L253.2,387.2 L254.6,393.8 L253.9,400.3 L252.4,406.9 L252.0,413.4 L252.6,420.0 L284.9,420.0 L284.3,413.4 L284.0,406.9 L285.3,400.3 L287.5,393.8 L288.7,387.2 L287.6,380.6 L285.4,374.1 L283.6,367.5 L282.5,360.9 L281.1,354.4 L279.0,347.8 L277.6,341.2 L277.7,334.7 L278.6,328.1 L278.3,321.6 L276.4,315.0 L274.3,308.4 L273.7,301.9 L274.3,295.3 L275.1,288.8 L275.5,282.2 L276.5,275.6 L278.6,269.1 L280.7,262.5 L281.0,255.9 L279.4,249.4 L277.8,242.8 L277.7,236.2 L278.4,229.7 L278.6,223.1 L278.1,216.6 L277.9,210.0 L278.5,203.4 L278.8,196.9 L277.5,190.3 L275.3,183.8 L274.1,177.2 L275.2,170.6 L277.4,164.1 L279.2,157.5 L280.3,150.9 L281.7,144.4 L283.8,137.8 L285.2,131.2 L285.1,124.7 L284.2,118.1 L284.5,111.6 L286.4,105.0 L288.5,98.4 L289.1,91.9 L288.5,85.3 L287.7,78.8 L287.3,72.2 L286.3,65.6 L284.2,59.1 L282.1,52.5 L281.8,45.9 L283.4,39.4 L285.0,32.8 L285.1,26.2 L284.4,19.7 L284.2,13.1 L284.7,6.6 L284.9,0.0 Z'/%3E%3Cpath d='M71.0,0.0 L71.7,6.6 L71.9,13.1 L71.5,19.7 L71.5,26.2 L72.7,32.8 L74.0,39.4 L73.7,45.9 L71.6,52.5 L69.5,59.1 L69.0,65.6 L69.7,72.2 L70.4,78.8 L70.8,85.3 L72.1,91.9 L74.5,98.4 L76.8,105.0 L77.4,111.6 L76.6,118.1 L76.3,124.7 L77.7,131.2 L79.8,137.8 L81.1,144.4 L81.4,150.9 L81.9,157.5 L82.6,164.1 L82.5,170.6 L80.5,177.2 L77.6,183.8 L75.8,190.3 L75.9,196.9 L76.7,203.4 L76.8,210.0 L76.1,216.6 L75.9,223.1 L76.3,229.7 L76.3,236.2 L75.1,242.8 L73.8,249.4 L74.1,255.9 L76.2,262.5 L78.3,269.1 L78.8,275.6 L78.1,282.2 L77.4,288.8 L77.0,295.3 L75.7,301.9 L73.3,308.4 L71.0,315.0 L70.4,321.6 L71.2,328.1 L71.5,334.7 L70.1,341.2 L68.0,347.8 L66.7,354.4 L66.4,360.9 L65.9,367.5 L65.2,374.1 L65.3,380.6 L67.3,387.2 L70.2,393.8 L72.0,400.3 L71.9,406.9 L71.1,413.4 L71.0,420.0 L99.0,420.0 L98.5,413.4 L99.2,406.9 L100.4,400.3 L100.5,393.8 L98.4,387.2 L95.3,380.6 L93.2,374.1 L92.4,367.5 L91.9,360.9 L91.0,354.4 L90.5,347.8 L91.5,341.2 L93.1,334.7 L93.5,328.1 L92.5,321.6 L91.3,315.0 L91.9,308.4 L93.9,301.9 L95.8,295.3 L97.0,288.8 L98.0,282.2 L99.7,275.6 L101.1,269.1 L100.7,262.5 L98.7,255.9 L97.0,249.4 L96.9,242.8 L98.1,236.2 L98.7,229.7 L98.5,223.1 L98.2,216.6 L98.8,210.0 L99.3,203.4 L98.6,196.9 L97.4,190.3 L97.3,183.8 L99.4,177.2 L102.5,170.6 L104.6,164.1 L105.4,157.5 L105.9,150.9 L106.8,144.4 L107.3,137.8 L106.3,131.2 L104.7,124.7 L104.3,118.1 L105.3,111.6 L106.5,105.0 L105.9,98.4 L103.9,91.9 L102.0,85.3 L100.8,78.8 L99.8,72.2 L98.1,65.6 L96.7,59.1 L97.1,52.5 L99.1,45.9 L100.8,39.4 L100.9,32.8 L99.7,26.2 L99.1,19.7 L99.3,13.1 L99.6,6.6 L99.0,0.0 Z'/%3E%3Cpath d='M128.7,0.0 L129.4,6.6 L129.3,13.1 L128.9,19.7 L129.4,26.2 L130.7,32.8 L131.3,39.4 L130.0,45.9 L127.7,52.5 L126.5,59.1 L127.1,65.6 L128.5,72.2 L129.5,78.8 L130.5,85.3 L132.3,91.9 L134.7,98.4 L136.1,105.0 L135.7,111.6 L134.7,118.1 L134.8,124.7 L136.5,131.2 L138.1,137.8 L138.4,144.4 L138.0,150.9 L137.9,157.5 L137.7,164.1 L136.3,170.6 L133.5,177.2 L130.7,183.8 L129.9,190.3 L130.8,196.9 L131.6,203.4 L131.3,210.0 L130.6,216.6 L130.7,223.1 L131.1,229.7 L130.6,236.2 L129.3,242.8 L128.7,249.4 L130.0,255.9 L132.3,262.5 L133.5,269.1 L132.9,275.6 L131.5,282.2 L130.5,288.8 L129.5,295.3 L127.7,301.9 L125.3,308.4 L123.9,315.0 L124.3,321.6 L125.3,328.1 L125.2,334.7 L123.5,341.2 L121.9,347.8 L121.6,354.4 L122.0,360.9 L122.1,367.5 L122.3,374.1 L123.7,380.6 L126.5,387.2 L129.3,393.8 L130.1,400.3 L129.2,406.9 L128.4,413.4 L128.7,420.0 L160.0,420.0 L159.3,413.4 L159.6,406.9 L161.1,400.3 L162.3,393.8 L161.5,387.2 L158.9,380.6 L156.3,374.1 L154.9,367.5 L153.9,360.9 L152.5,354.4 L151.1,347.8 L151.0,341.2 L152.1,334.7 L152.9,328.1 L152.1,321.6 L150.3,315.0 L149.5,308.4 L150.5,301.9 L152.2,295.3 L153.3,288.8 L154.2,282.2 L155.9,275.6 L158.0,269.1 L158.9,262.5 L157.7,255.9 L155.6,249.4 L154.8,242.8 L155.4,236.2 L156.3,229.7 L156.2,223.1 L155.8,216.6 L156.0,210.0 L156.7,203.4 L156.4,196.9 L154.9,190.3 L153.7,183.8 L154.5,177.2 L157.1,170.6 L159.7,164.1 L161.1,157.5 L162.1,150.9 L163.5,144.4 L164.9,137.8 L165.0,131.2 L163.9,124.7 L163.1,118.1 L163.9,111.6 L165.7,105.0 L166.5,98.4 L165.5,91.9 L163.8,85.3 L162.7,78.8 L161.8,72.2 L160.1,65.6 L158.0,59.1 L157.1,52.5 L158.3,45.9 L160.4,39.4 L161.2,32.8 L160.6,26.2 L159.7,19.7 L159.8,13.1 L160.2,6.6 L160.0,0.0 Z'/%3E%3Cpath d='M193.1,0.0 L193.6,6.6 L193.3,13.1 L193.1,19.7 L193.8,26.2 L194.9,32.8 L194.6,39.4 L192.7,45.9 L190.9,52.5 L190.8,59.1 L192.5,65.6 L194.2,72.2 L195.2,78.8 L196.4,85.3 L198.3,91.9 L200.1,98.4 L200.3,105.0 L199.0,111.6 L197.9,118.1 L198.5,124.7 L200.0,131.2 L200.7,137.8 L200.0,144.4 L198.9,150.9 L198.2,157.5 L197.2,164.1 L194.9,170.6 L191.9,177.2 L190.1,183.8 L190.5,190.3 L191.9,196.9 L192.4,203.4 L191.9,210.0 L191.4,216.6 L191.7,223.1 L191.9,229.7 L191.2,236.2 L190.1,242.8 L190.4,249.4 L192.3,255.9 L194.1,262.5 L194.2,269.1 L192.5,275.6 L190.8,282.2 L189.8,288.8 L188.6,295.3 L186.7,301.9 L184.9,308.4 L184.7,315.0 L186.0,321.6 L187.1,328.1 L186.5,334.7 L185.0,341.2 L184.3,347.8 L185.0,354.4 L186.1,360.9 L186.8,367.5 L187.8,374.1 L190.1,380.6 L193.1,387.2 L194.9,393.8 L194.5,400.3 L193.1,406.9 L192.6,413.4 L193.1,420.0 L218.8,420.0 L218.1,413.4 L218.0,406.9 L219.4,400.3 L221.4,393.8 L222.1,387.2 L220.7,380.6 L218.3,374.1 L216.5,367.5 L215.4,360.9 L213.9,354.4 L211.9,347.8 L210.8,341.2 L211.1,334.7 L212.0,328.1 L211.6,321.6 L209.6,315.0 L207.8,308.4 L207.5,301.9 L208.4,295.3 L209.3,288.8 L209.8,282.2 L211.1,275.6 L213.3,269.1 L215.1,262.5 L215.1,255.9 L213.3,249.4 L211.9,242.8 L211.9,236.2 L212.7,229.7 L212.8,223.1 L212.3,216.6 L212.2,210.0 L212.9,203.4 L213.0,196.9 L211.6,190.3 L209.6,183.8 L208.9,177.2 L210.3,170.6 L212.7,164.1 L214.5,157.5 L215.6,150.9 L217.1,144.4 L219.1,137.8 L220.2,131.2 L219.9,124.7 L219.0,118.1 L219.4,111.6 L221.4,105.0 L223.2,98.4 L223.5,91.9 L222.6,85.3 L221.7,78.8 L221.2,72.2 L219.9,65.6 L217.7,59.1 L215.9,52.5 L215.9,45.9 L217.7,39.4 L219.1,32.8 L219.1,26.2 L218.3,19.7 L218.2,13.1 L218.7,6.6 L218.8,0.0 Z'/%3E%3C/g%3E%3C/svg%3E");
+  -webkit-mask-size: 240px 420px;
+  mask-size: 240px 420px;
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+}
 }
 
 body {
-  background-color: var(--color-paper);
+  /* No background here — see the note on html::before above. */
+  min-height: 100vh;
   color: var(--color-ink);
   font-family: var(--font-body);
 }
@@ -47,26 +374,139 @@ body {
    .halftone   — newsprint dot texture
    .barcode    — decorative stripe code */
 
+/* .brut/.brut-sm/.btn-brut's glow ring: a ::after larger than the
+   element on every side, radial-gradient filled, sitting behind it
+   (z-index: -1) — visible as a halo around the whole perimeter, not
+   just a corner peek. Requires the element itself to be a stacking
+   context (position + z-index) so the pseudo reliably sits behind its
+   own background rather than behind unrelated page content. */
+/* Plain again — the glow-ring pseudo-element made every .brut-based box
+   (including content-sparse ones like a collapsed sidebar header) show
+   the gradient across its WHOLE background rather than a thin ring:
+   within the stacking context .brut itself established, its own
+   background paints before (below) a negative-z-index child, so with
+   nothing else opaque to hide it, the pseudo showed straight through.
+   Reverted to a plain solid offset shadow. The real glow ring lives
+   only on DealCard now (.deal-card-glow, below), whose extra wrapper
+   div avoids this exact problem. */
 .brut {
   border: 2px solid var(--color-ink);
-  box-shadow: 4px 4px 0 var(--color-ink);
+  box-shadow: 4px 4px 0 var(--color-shadow);
   background-color: var(--color-card);
 }
 
 .brut-sm {
   border: 2px solid var(--color-ink);
-  box-shadow: 3px 3px 0 var(--color-ink);
+  box-shadow: 3px 3px 0 var(--color-shadow);
   background-color: var(--color-card);
 }
 
 .btn-brut {
   border: 2px solid var(--color-ink);
-  box-shadow: 3px 3px 0 var(--color-ink);
+  box-shadow: 3px 3px 0 var(--color-shadow);
   transition: transform 0.08s ease, box-shadow 0.08s ease;
 }
 .btn-brut:active:not(:disabled) {
   transform: translate(3px, 3px);
+  box-shadow: 0 0 0 var(--color-shadow);
+}
+
+/* .btn-brut's press-on-click behaviour, minus the orange shadow. Scoped
+   to the deals page's account-nudge banner CTAs (page.tsx) — NOT a
+   global swap of .btn-brut, which plenty of other buttons still use
+   with the orange shadow on purpose. The banners themselves now wear
+   the same translucent-over-the-liquid-ring surface as DealCard (see
+   .deal-card-glow usage in page.tsx/DealsSidebar.tsx) rather than a
+   flat background, so there's no matching .brut-pink container class
+   any more — only this button needed to stay bespoke. */
+.btn-brut-ink {
+  border: 2px solid var(--color-ink);
+  box-shadow: 3px 3px 0 var(--color-ink);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+.btn-brut-ink:active:not(:disabled) {
+  transform: translate(3px, 3px);
   box-shadow: 0 0 0 var(--color-ink);
+}
+
+/* .btn-brut-ink's border + physical press, minus the painted shadow —
+   for a GlassCard-wrapped button, where the animated LiquidGlow ring
+   behind it (.deal-card-glow-ring) is the depth cue instead. Without
+   this rule the button had no border/press at all: just a bare color
+   fill floating inside the wrapper, with the ring's gradient peeking out
+   on every side with nothing crisp framing where the button actually
+   ends — which is what "doesn't fit the button" looked like. */
+.glow-btn {
+  position: relative;
+  isolation: isolate;
+  border: 2px solid var(--color-ink);
+  transition: transform 0.08s ease;
+}
+.glow-btn:active:not(:disabled) {
+  transform: translate(3px, 3px);
+}
+
+/* Deal cards' glow ring, done right: no z-index at all this time — that
+   was exactly what broke .brut above. ::before is painted first among
+   the wrapper's children by definition, so the actual card (a normal
+   later DOM sibling, with its own opaque bg-card + overflow-hidden for
+   the hover sheen) always paints on top of it regardless of anything
+   the card itself does internally (hover transforms, its own stacking
+   context, etc.) — nested stacking contexts don't reorder relative to
+   an ancestor's sibling paint order. */
+.deal-card-glow {
+  position: relative;
+}
+/* Same size as the card (inset: 0), then shifted down-right — the
+   classic brutalist offset-shadow shape (was inset:-7px, a symmetric
+   ring on every side; that read as "around the whole card" rather than
+   the corner peek this is supposed to be). Grows on hover, matching
+   the original 4px → 7px shadow growth. */
+/* The ring is a real <canvas> (LiquidGlow) rather than a pseudo-element,
+   because it carries the app's actual flowing shader — a 2D window onto
+   the one shared WebGL field in lib/liquidField, which is how 24 cards
+   get the effect between them instead of each demanding a context the
+   browser doesn't have to give.
+
+   The background here is the fallback: nothing is drawn over it when
+   the field is unavailable (no WebGL, or the budget already spent), so
+   the ring degrades to a drifting flesh gradient rather than vanishing.
+   background-position is the only animated property, so it composites
+   without touching layout and leaves `transform` to the hover offset. */
+.deal-card-glow-ring {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: translate(4px, 4px);
+  background:
+    radial-gradient(60% 70% at 25% 30%, var(--color-deals-from) 0%, transparent 62%),
+    radial-gradient(55% 65% at 78% 25%, var(--color-deals-to) 0%, transparent 60%),
+    radial-gradient(70% 75% at 60% 80%, var(--color-deals-via) 0%, transparent 65%),
+    var(--color-deals-via);
+  /* Each layer larger than the box, so there's somewhere to drift to —
+     at 100% the blobs would only slide against their own edges. */
+  background-size: 200% 200%, 190% 190%, 220% 220%, auto;
+  animation: liquid-drift 19s ease-in-out infinite alternate;
+  transition: transform 0.2s ease;
+}
+/* Slow and `alternate`: the reversal is what reads as liquid settling
+   and turning over, and it also hides the seam a looping keyframe set
+   would otherwise show. */
+@keyframes liquid-drift {
+  0%   { background-position: 0% 20%, 100% 0%, 40% 100%, 0 0; }
+  50%  { background-position: 55% 60%, 30% 45%, 90% 30%, 0 0; }
+  100% { background-position: 100% 40%, 0% 85%, 10% 65%, 0 0; }
+}
+/* Set by LiquidGlow once it's actually drawing: the shader covers the
+   fallback completely, so animating it underneath is 24 elements'
+   worth of compositing nobody can see. */
+.deal-card-glow-ring[data-live] {
+  animation: none;
+}
+.deal-card-glow:hover .deal-card-glow-ring {
+  transform: translate(7px, 7px);
 }
 
 .sticker {
@@ -280,6 +720,32 @@ body {
 /* Watermelon toy discoverability. The melon rocks on a long loop so it
    catches the eye without becoming a distraction, and the first-visit
    callout pops in beside it. */
+/* Scroll cue under the hero — the dot dips inside the mouse outline,
+   same idea as the mockup's #scroll-cue. */
+@keyframes scroll-dip {
+  0%, 100% { transform: translate(-50%, 0); opacity: 1; }
+  60%      { transform: translate(-50%, 10px); opacity: 0.3; }
+}
+
+.scroll-cue::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  width: 4px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--color-ink);
+  transform: translateX(-50%);
+  animation: scroll-dip 1.6s ease-in-out infinite;
+}
+
+/* Same cue over a dark/saturated backdrop (the trip-planner intro) —
+   the ink dot disappears against the gradient. */
+.scroll-cue-light::before {
+  background: #ffffff;
+}
+
 @keyframes melon-wiggle {
   0%, 88%, 100% { transform: rotate(0deg); }
   91% { transform: rotate(-13deg) scale(1.12); }
@@ -354,6 +820,9 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
   .animate-in,
   .animate-print,
   .animate-stamp {
@@ -364,6 +833,13 @@ body {
   }
   .price-tag:hover,
   .search-streak {
+    animation: none;
+  }
+  /* The ring keeps its colours, just stops moving — the drift is the
+     decoration, the flesh gradient is the design. LiquidGlow declines
+     to subscribe to the shared field under reduced motion, so this
+     gradient is all that's showing anyway. */
+  .deal-card-glow-ring {
     animation: none;
   }
   .tear-shimmer::after {
@@ -378,6 +854,9 @@ body {
   }
   .animate-melon,
   .animate-callout {
+    animation: none;
+  }
+  .scroll-cue::before {
     animation: none;
   }
 }

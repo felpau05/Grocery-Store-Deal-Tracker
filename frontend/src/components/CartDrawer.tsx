@@ -1,8 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { BTN_CART_ADD } from "@/lib/button";
 import { useCart, type CartEntry } from "@/lib/cart";
+import { formatSavedDate, usePlans, type SavedPlan } from "@/lib/plans";
 import { useToast } from "@/lib/toast";
 import CartGlyph from "./CartGlyph";
 
@@ -69,6 +72,57 @@ function EntryRow({ entry }: { entry: CartEntry }) {
   );
 }
 
+/** A saved plan's compact row — name (or a fallback) with its date always
+ *  shown alongside, never replaced by it; the date is metadata for
+ *  tracking, not part of the name. Clicking the row hands off to /list,
+ *  which has the room for the actual receipts and is where "Use this
+ *  plan" already needs to trigger a fresh optimize call anyway. */
+function PlanRow({ plan }: { plan: SavedPlan }) {
+  const { removePlan, restorePlan } = usePlans();
+  const { toast } = useToast();
+  const { closeDrawer } = useCart();
+  const router = useRouter();
+
+  const onRemove = () => {
+    const removed = removePlan(plan.id);
+    if (removed) {
+      toast(`Removed "${removed.name ?? "saved plan"}"`, {
+        action: { label: "Undo", onClick: () => restorePlan(removed) },
+      });
+    }
+  };
+
+  return (
+    <li className="flex items-center gap-3 px-5 py-2.5 hover:bg-card transition-colors group">
+      <button
+        onClick={() => {
+          closeDrawer();
+          router.push("/list");
+        }}
+        className="flex-1 min-w-0 text-left group/plan"
+      >
+        <span className="block text-sm text-ink font-medium truncate group-hover/plan:text-sale transition-colors">
+          {plan.name ?? "Untitled plan"}
+          <span className="font-mono text-[11px] text-ink-soft font-normal ml-1.5">
+            {formatSavedDate(plan.updatedAt)}
+          </span>
+        </span>
+        <span className="block font-mono text-[11px] text-ink-soft/80 truncate">
+          {plan.itemCount} {plan.itemCount === 1 ? "item" : "items"} · ${plan.totalCost.toFixed(2)}
+        </span>
+      </button>
+
+      <button
+        onClick={onRemove}
+        aria-label={`Remove saved plan ${plan.name ?? "untitled"}`}
+        className="text-ink-soft/50 hover:text-sale text-lg leading-none px-1.5 py-1 transition-colors shrink-0"
+      >
+        ×
+      </button>
+    </li>
+  );
+}
+
 /**
  * Slide-over grocery list panel: right-side drawer over a dimmed
  * backdrop. Rendered once in the layout so it's available on every
@@ -77,6 +131,7 @@ function EntryRow({ entry }: { entry: CartEntry }) {
  */
 export default function CartDrawer() {
   const { entries, isDrawerOpen, closeDrawer, add, clear, restore } = useCart();
+  const { plans: savedPlans } = usePlans();
   const { toast } = useToast();
   const [draft, setDraft] = useState("");
   const panelRef = useRef<HTMLDivElement>(null);
@@ -154,7 +209,7 @@ export default function CartDrawer() {
         className="animate-drawer absolute right-0 top-0 h-full w-full max-w-md bg-paper border-l-2 border-ink flex flex-col outline-none"
       >
         {/* Header — solid ink band, knockout text */}
-        <div className="flex items-center justify-between px-5 h-14 bg-ink text-paper shrink-0">
+        <div className="flex items-center justify-between px-5 h-14 bg-produce text-paper shrink-0">
           <div className="flex items-center gap-2.5">
             <CartGlyph className="w-5 h-5 text-tag" />
             <span className="font-display text-sm tracking-wide">
@@ -204,6 +259,20 @@ export default function CartDrawer() {
           </ul>
         )}
 
+        {/* Saved plans */}
+        {savedPlans.length > 0 && (
+          <div className="shrink-0 border-t-2 border-ink/15">
+            <p className="font-mono font-bold text-[11px] uppercase tracking-[0.1em] text-ink-soft px-5 pt-3">
+              Saved plans ({savedPlans.length})
+            </p>
+            <ul className="max-h-40 overflow-y-auto py-1 divide-y divide-border-tan/40">
+              {savedPlans.map((plan) => (
+                <PlanRow key={plan.id} plan={plan} />
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Quick add */}
         <form
           onSubmit={(e) => {
@@ -221,10 +290,7 @@ export default function CartDrawer() {
             placeholder="QUICK ADD — e.g. eggs"
             className="flex-1 bg-card border-2 border-ink px-3 py-2 font-mono text-sm text-ink placeholder:text-ink-soft/60 focus:bg-tag/20 outline-none transition-colors"
           />
-          <button
-            type="submit"
-            className="btn-brut px-3 py-2 bg-ink text-paper text-sm font-mono font-bold"
-          >
+          <button type="submit" className={BTN_CART_ADD}>
             Add
           </button>
         </form>
@@ -258,7 +324,7 @@ export default function CartDrawer() {
             className={`block text-center font-display py-3 transition-colors ${
               entries.length === 0
                 ? "bg-ink/10 text-ink-soft/50 pointer-events-none border-2 border-ink/10"
-                : "btn-brut bg-sale-dark text-paper hover:bg-produce"
+                : "btn-brut-ink bg-sale text-paper hover:bg-produce"
             }`}
           >
             Plan my trip →

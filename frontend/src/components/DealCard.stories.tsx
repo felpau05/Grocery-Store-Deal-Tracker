@@ -29,7 +29,15 @@ const meta = {
   tags: ["autodocs"],
   decorators: [
     (Story) => (
-      <div className="w-80">
+      // The card is glass now (bg-card/80 + backdrop-blur) — on
+      // Storybook's plain white canvas it reads as a flat, barely
+      // translucent card, which is misleading. This stands in for the
+      // colorful backgrounds it actually sits on in the app (same stops
+      // as MelonHero's own gradient) so the frosted effect shows here
+      // too. Deliberately NOT the same colors as the card's own glow
+      // ring (pink/orange, globals.css --color-shadow-*) — same hues
+      // would make the ring blend invisibly into the backdrop.
+      <div className="w-80 p-8 bg-[radial-gradient(circle,#ff9494,#ff7575,#ff3434)]">
         <Story />
       </div>
     ),

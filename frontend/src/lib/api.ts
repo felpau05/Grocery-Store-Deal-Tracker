@@ -54,11 +54,11 @@ export type DealHistory = {
     merchant_id: number;
     merchant_name: string;
     price: number;
-    price_unit: string;
+    price_unit: "g" | "ml" | "each";
     price_per_unit: number | null;
     price_per_unit_label: "kg" | "L" | null;
     size: number | null;
-    size_unit: string | null;
+    size_unit: "g" | "ml" | null;
     product_image: string | null;
     cutout_image: string | null;
     valid_from: string;
@@ -276,7 +276,8 @@ export type DealStatus = "active" | "upcoming" | "all";
 
 type DealFilterParams = {
   q?: string;
-  category?: string;
+  /** Multi-select — any deal matching one or more of these categories. */
+  categories?: string[];
   merchantId?: number;
   /** Restrict to the account's chosen stores */
   merchantIds?: number[];
@@ -293,7 +294,7 @@ type DealFilterParams = {
 function dealFilterParams(params: DealFilterParams): URLSearchParams {
   const search = new URLSearchParams();
   if (params.q) search.set("q", params.q);
-  if (params.category) search.set("category", params.category);
+  (params.categories ?? []).forEach((c) => search.append("categories", c));
   if (params.merchantId) search.set("merchant_id", String(params.merchantId));
   (params.merchantIds ?? []).forEach((m) => search.append("merchant_ids", String(m)));
   if (params.postalCode) search.set("postal_code", params.postalCode);
@@ -374,5 +375,71 @@ export function optimizeTrip(
     mode,
     merchant_ids: merchantIds ?? null,
     postal_code: postalCode ?? null,
+  });
+}
+
+// ── Signed-in cart + saved trip plans ────────────────────────────────
+// Anonymous visitors never call these — lib/cart.tsx and lib/plans.tsx
+// keep a local-only cart/plans for them instead. Wire shape is snake_case
+// straight off the backend (see backend/routes/cart.py), same convention
+// as every other type in this file — conversion to the app's camelCase
+// CartEntry/SavedPlan runtime shapes happens in cart.tsx/plans.tsx, not here.
+
+export type CartApiItem = {
+  query: string;
+  label: string;
+  item_id: number | null;
+  merchant_id: number | null;
+  merchant_name: string | null;
+  price: number | null;
+  image: string | null;
+  added_at: number; // ms epoch
+};
+
+export function fetchCart(): Promise<CartApiItem[]> {
+  return authRequest("/cart", { headers: authHeaders() });
+}
+
+export function syncCart(items: CartApiItem[]): Promise<CartApiItem[]> {
+  return authRequest("/cart", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(items),
+  });
+}
+
+export type SavedPlanApi = {
+  id: number;
+  name: string | null;
+  updated_at: number; // ms epoch
+  mode: OptimizeMode;
+  queries: string[];
+  picks: Record<string, number>;
+  total_cost: number;
+  stops: number;
+  item_count: number;
+  plans: StorePlan[];
+};
+
+export function fetchSavedPlans(): Promise<SavedPlanApi[]> {
+  return authRequest("/trip-plans", { headers: authHeaders() });
+}
+
+export function createSavedPlan(input: {
+  name: string | null;
+  mode: OptimizeMode;
+  items: { query: string; item_id: number }[];
+}): Promise<SavedPlanApi> {
+  return authRequest("/trip-plans", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteSavedPlan(id: number): Promise<{ ok: boolean }> {
+  return authRequest(`/trip-plans/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
   });
 }

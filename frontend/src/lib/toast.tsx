@@ -73,7 +73,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((t) => (
           <div
             key={t.id}
-            className="animate-toast pointer-events-auto flex items-center gap-4 bg-ink text-paper border-2 border-ink pl-4 pr-2 py-2 shadow-[4px_4px_0_var(--color-tag)] max-w-[92vw]"
+            className="animate-toast pointer-events-auto flex items-center gap-4 bg-produce text-paper border-2 border-ink pl-4 pr-2 py-2 shadow-[4px_4px_0_var(--color-tag)] max-w-[92vw]"
           >
             <span className="text-sm truncate">{t.message}</span>
             {t.action && (

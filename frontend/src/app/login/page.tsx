@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { googleLoginUrl } from "@/lib/api";
 import { useAccount } from "@/lib/account";
+import { BTN_PRIMARY_CTA } from "@/lib/button";
 import { useToast } from "@/lib/toast";
+import GlassCard, { GLASS_SURFACE_DENSE } from "@/components/GlassCard";
 
 type Mode = "signin" | "signup";
 
@@ -20,6 +22,17 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // meta (and so googleEnabled) resolves from an effect-driven fetch —
+  // on a fast/local backend it can finish before hydration completes,
+  // so the very first client render already disagrees with the server's
+  // (meta-less) render of the Google button's `disabled` attribute. Same
+  // isMounted-gate list/page.tsx's "Build my trip" button already uses:
+  // render the SSR-safe value until mount is confirmed, only switch to
+  // the real one afterward, once any mismatch can't matter anymore.
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Google's callback redirects here with #token=… (or #error=…) — adopt
   // the session and clean the hash off the URL.
@@ -82,16 +95,17 @@ export default function LoginPage() {
   return (
     <main className="max-w-md mx-auto px-6 py-14">
       <header className="mb-8 text-center">
-        <span className="sticker text-[11px] text-ink">Members only</span>
+        {/*<span className="sticker text-[11px] text-ink">Members only</span>*/}
         <h1 className="font-display text-4xl text-ink leading-[0.95] mt-4">
           {mode === "signin" ? "Welcome back" : "Join the club"}
         </h1>
-        <p className="text-ink-soft mt-3 font-medium">
-          Your postal code, your stores, your deals — private to your account.
+        {/* No card behind this — raw gradient background. */}
+        <p className="text-ink mt-3 font-medium">
+          Your postal code, your stores, your deals.
         </p>
       </header>
 
-      <div className="brut p-6">
+      <GlassCard surfaceClassName={`${GLASS_SURFACE_DENSE} p-6`}>
         {/* Mode toggle */}
         <div className="flex border-2 border-ink p-1 mb-5 bg-paper">
           {(["signin", "signup"] as Mode[]).map((m) => (
@@ -102,7 +116,7 @@ export default function LoginPage() {
                 setError(null);
               }}
               className={`flex-1 text-[12px] font-mono font-bold py-1.5 transition-colors ${
-                mode === m ? "bg-ink text-paper" : "text-ink-soft hover:text-ink"
+                mode === m ? "bg-produce text-paper" : "text-ink-soft hover:text-ink"
               }`}
             >
               {m === "signin" ? "Sign in" : "Create account"}
@@ -145,13 +159,14 @@ export default function LoginPage() {
             </p>
           )}
 
-          <button
+          <GlassCard
+            as="button"
             type="submit"
             disabled={busy}
-            className="btn-brut w-full bg-sale-dark text-paper font-display py-3 hover:bg-produce transition-colors disabled:opacity-40"
+            surfaceClassName={BTN_PRIMARY_CTA}
           >
             {busy ? "…" : mode === "signin" ? "Sign in" : "Create account"}
-          </button>
+          </GlassCard>
         </form>
 
         <div className="flex items-center gap-3 my-5">
@@ -164,22 +179,31 @@ export default function LoginPage() {
           onClick={() => {
             if (googleEnabled) window.location.href = googleLoginUrl;
           }}
-          disabled={!googleEnabled}
-          title={googleEnabled ? undefined : "Google sign-in isn't configured yet (GOOGLE_CLIENT_ID pending)"}
-          className="btn-brut w-full bg-card text-ink font-mono font-bold text-sm py-2.5 disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed"
+          disabled={isMounted ? !googleEnabled : false}
+          title={isMounted && !googleEnabled ? "Google sign-in isn't configured yet (GOOGLE_CLIENT_ID pending)" : undefined}
+          suppressHydrationWarning
+          className="btn-brut-ink w-full bg-card text-ink font-mono font-bold text-sm py-2.5 disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed"
         >
-          <span className="font-display mr-2" aria-hidden>G</span>
+          {/* Google's official "G" mark — brand guidelines require it stay
+              full-color, not tinted to match button text/disabled state. */}
+          <svg aria-hidden className="inline-block w-[18px] h-[18px] mr-2 -mt-0.5 align-middle shrink-0" viewBox="0 0 18 18">
+            <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.874 2.684-6.615z" />
+            <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" />
+            <path fill="#FBBC05" d="M3.964 10.706A5.41 5.41 0 0 1 3.68 9c0-.593.102-1.17.284-1.706V4.962H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332z" />
+            <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 7.294C4.672 5.167 6.656 3.58 9 3.58z" />
+          </svg>
           Continue with Google
-          {!googleEnabled && (
+          {isMounted && !googleEnabled && (
             <span className="block font-mono font-normal text-[10px] text-ink-soft mt-0.5">
               coming soon — keys not configured
             </span>
           )}
         </button>
-      </div>
+      </GlassCard>
 
+      {/* No card behind this — raw gradient background. */}
       <p className="text-center mt-6">
-        <Link href="/" className="font-mono font-bold text-[12px] uppercase tracking-[0.1em] text-ink-soft hover:text-sale transition-colors">
+        <Link href="/" className="font-mono font-bold text-[12px] uppercase tracking-[0.1em] text-ink hover:text-sale transition-colors">
           ← Keep browsing the example flyer
         </Link>
       </p>

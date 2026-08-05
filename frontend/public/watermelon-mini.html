@@ -100,6 +100,14 @@
   }
   #back-link:hover { background: rgba(255, 255, 255, 0.65); }
   #back-link:active { transform: scale(0.96); }
+
+  /* ── Embedded preview mode ──────────────────────────────────────
+     Same scene as the full toy, reduced to a non-interactive loop:
+     all controls hidden (.ui-group covers the fruit picker too),
+     pointer events off so clicks reach the parent link. */
+  .ui-group, #back-link { display: none !important; }
+  #canvas-wrap { pointer-events: none !important; cursor: default !important; }
+  html, body { overflow: hidden; }
 </style>
 </head>
 <body>
@@ -820,7 +828,19 @@
 
   // Shared, repaintable canvases: switching fruit just redraws these and
   // flags the textures dirty, instead of rebuilding meshes/materials.
-  const RIND_W = 2048, RIND_H = 1024, FLESH_S = 1024;
+  /* Sized for the 150px corner preview, not the full-screen toy:
+     8MB of rind and 4MB of flesh for a thumbnail was the single
+     biggest allocation on every page in the app.
+
+     512 is matched to that box specifically: a sphere's visible face
+     spans half the rind's width, so only RIND_W/2 texels stretch across
+     the melon's diameter — 256 over ~260 device pixels at 2x DPR, about
+     1:1. Grow the box past ~150px and this wants to go up with it or the
+     melon goes soft. */
+  const RIND_W = 512, RIND_H = 256, FLESH_S = 256;
+  /* The dimensions the FRUITS generators are actually written for —
+     see drawScaled below for why they can't just be handed RIND_W. */
+  const RIND_SRC_W = 2048, RIND_SRC_H = 1024, FLESH_SRC_S = 1024;
   const rindCanvasEl = document.createElement('canvas');
   rindCanvasEl.width = RIND_W; rindCanvasEl.height = RIND_H;
   const rindCtx = rindCanvasEl.getContext('2d');
@@ -828,8 +848,35 @@
   fleshCanvasEl.width = FLESH_S; fleshCanvasEl.height = FLESH_S;
   const fleshCtx = fleshCanvasEl.getContext('2d');
 
-  FRUITS[currentFruit].rind(rindCtx, RIND_W, RIND_H);
-  FRUITS[currentFruit].flesh(fleshCtx, FLESH_S);
+  /* The FRUITS generators mix relative coordinates with ABSOLUTE pixel
+     constants — blob radii of rand(14,46), a 40px stripe wobble, a
+     130px burst height, seed bands at h-46/h-13 — all tuned against a
+     2048x1024 rind. Hand them a 512x256 canvas and only half the
+     drawing shrinks with it: the blobs stay their original size while
+     the melon shrinks around them, so they overlap into a pale wash and
+     the dark base disappears. (That's exactly what the shrunk preview
+     looked like before this.)
+
+     So draw at the size they expect and downsample once into the canvas
+     we actually keep. The full-size scratch is local and collected
+     right after — only the small canvas is retained and uploaded, which
+     is where the memory saving was ever coming from. */
+  function drawScaled(ctx, w, h, srcW, srcH, draw) {
+    if (w === srcW && h === srcH) {
+      draw(ctx, srcW, srcH);
+      return;
+    }
+    const scratch = document.createElement('canvas');
+    scratch.width = srcW; scratch.height = srcH;
+    draw(scratch.getContext('2d'), srcW, srcH);
+    ctx.clearRect(0, 0, w, h);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(scratch, 0, 0, w, h);
+  }
+
+  drawScaled(rindCtx, RIND_W, RIND_H, RIND_SRC_W, RIND_SRC_H, FRUITS[currentFruit].rind);
+  drawScaled(fleshCtx, FLESH_S, FLESH_S, FLESH_SRC_S, FLESH_SRC_S, FRUITS[currentFruit].flesh);
 
   const fleshTex = new THREE.CanvasTexture(fleshCanvasEl);
   fleshTex.anisotropy = 4;
@@ -893,11 +940,9 @@
     currentFruit = key;
     if (gravityOn) liftAll();
     resetAll();
-    rindCtx.clearRect(0, 0, RIND_W, RIND_H);
-    FRUITS[key].rind(rindCtx, RIND_W, RIND_H);
+    drawScaled(rindCtx, RIND_W, RIND_H, RIND_SRC_W, RIND_SRC_H, FRUITS[key].rind);
     rindTex.needsUpdate = true;
-    fleshCtx.clearRect(0, 0, FLESH_S, FLESH_S);
-    FRUITS[key].flesh(fleshCtx, FLESH_S);
+    drawScaled(fleshCtx, FLESH_S, FLESH_S, FLESH_SRC_S, FLESH_SRC_S, FRUITS[key].flesh);
     fleshTex.needsUpdate = true;
     document.querySelectorAll('.fruit-btn').forEach((b) => b.classList.remove('active'));
     const btn = document.getElementById('fruit-' + key);
@@ -910,7 +955,7 @@
   });
 
   const shadowTex = (function() {
-    const s = 256;
+    const s = 128;
     const c = document.createElement('canvas');
     c.width = s; c.height = s;
     const ctx = c.getContext('2d');
@@ -934,7 +979,7 @@
 
   // Visible floor disc with boundary ring (shown while gravity is on).
   const floorTex = (function() {
-    const s = 1024;
+    const s = 256;
     const c = document.createElement('canvas');
     c.width = s; c.height = s;
     const ctx = c.getContext('2d');
@@ -947,11 +992,14 @@
     ctx.fillStyle = g;
     ctx.beginPath(); ctx.arc(cx, cx, r, 0, Math.PI * 2); ctx.fill();
 
+    /* Ring widths as fractions of s, not the flat 10/4 px they were:
+       those were written against s=1024, so at this canvas's 256 they'd
+       draw four times as thick relative to the disc. */
     ctx.strokeStyle = 'rgba(165,85,30,0.4)';
-    ctx.lineWidth = 10;
+    ctx.lineWidth = s * (10 / 1024);
     ctx.beginPath(); ctx.arc(cx, cx, r * 0.9, 0, Math.PI * 2); ctx.stroke();
     ctx.strokeStyle = 'rgba(165,85,30,0.15)';
-    ctx.lineWidth = 4;
+    ctx.lineWidth = s * (4 / 1024);
     ctx.beginPath(); ctx.arc(cx, cx, r * 0.6, 0, Math.PI * 2); ctx.stroke();
     return new THREE.CanvasTexture(c);
   })();
@@ -1171,7 +1219,7 @@
   const WORLD_X = new THREE.Vector3(1, 0, 0);
   const WORLD_Y = new THREE.Vector3(0, 1, 0);
   const tumbleVel = new THREE.Vector2();
-  let spinSpeed = 0.22;
+  let spinSpeed = 0.12;  // calmer than the full toy
   let rotationPaused = false;
 
   function applyTumble(rx, ry) {
@@ -1302,8 +1350,8 @@
     wrapEl.classList.remove('dragging');
   });
 
-  let camDist = 6.8;
-  let targetDist = 6.8;
+  let camDist = 7.6;
+  let targetDist = 7.6;
   const MIN_DIST = 3.6, MAX_DIST = 30;
 
   document.getElementById('zoom-in').addEventListener('click', () => {

@@ -93,9 +93,15 @@ def _merchant_in_clause(merchant_ids: list[int], param_prefix: str) -> tuple[str
     return f"merchant_id IN ({placeholders})", params
 
 
+def _category_in_clause(categories: list[str], param_prefix: str) -> tuple[str, dict]:
+    placeholders = ", ".join(f"%({param_prefix}_{i})s" for i in range(len(categories)))
+    params = {f"{param_prefix}_{i}": c for i, c in enumerate(categories)}
+    return f"category IN ({placeholders})", params
+
+
 def search_items(
     q: str | None = None,
-    category: str | None = None,
+    categories: list[str] | None = None,
     subcategory: str | None = None,
     merchant_id: int | None = None,
     merchant_ids: list[int] | None = None,  # a user's chosen stores — ANDed with merchant_id
@@ -145,9 +151,10 @@ def search_items(
     params["limit"] = limit
     params["offset"] = offset
 
-    if category:
-        clauses.append("category = %(category)s")
-        params["category"] = category
+    if categories:
+        clause, cparams = _category_in_clause(categories, "cat")
+        clauses.append(clause)
+        params.update(cparams)
 
     if subcategory:
         clauses.append("subcategory = %(subcategory)s")
@@ -182,7 +189,7 @@ def search_items(
 
 def facet_counts(
     q: str | None = None,
-    category: str | None = None,
+    categories: list[str] | None = None,
     merchant_id: int | None = None,
     merchant_ids: list[int] | None = None,
     postal_code: str | None = None,
@@ -192,13 +199,13 @@ def facet_counts(
     price_min: float | None = None,
     price_max: float | None = None,
 ) -> dict:
-    """Item counts for the deals page's category/store pills, plus the
-    exact total for the current filters (used for real pagination).
+    """Item counts for the deals page's category/store checkboxes, plus
+    the exact total for the current filters (used for real pagination).
 
     Standard faceted-search rule: a dimension's own counts ignore its own
     current selection (so category counts show what EVERY category would
-    yield, not just the selected one) but respect every other active
-    filter — store counts still reflect the current category, and
+    yield, not just the checked ones) but respect every other active
+    filter — store counts still reflect the checked categories, and
     category counts still reflect the current single-store pill
     (merchant_id) if one is selected. Store counts are always computed
     across the full `merchant_ids` scope (the user's stores, or the
@@ -224,15 +231,18 @@ def facet_counts(
     with get_cursor() as cur:
         # Total — every active filter applied, matches search_items exactly.
         total_extra = [store_clause] if store_clause else []
-        if category:
-            total_extra.append("category = %(fc_category)s")
+        total_params: dict = {}
+        if categories:
+            clause, total_params = _category_in_clause(categories, "fc_cat_total")
+            total_extra.append(clause)
         cur.execute(
             f"SELECT count(*) AS n FROM active_deals {_where(*total_extra)}",
-            {**shared_params, **store_params, "fc_category": category},
+            {**shared_params, **store_params, **total_params},
         )
         total = cur.fetchone()["n"]
 
-        # Per-category counts — store-scoped, but ignore the category filter.
+        # Per-category counts — store-scoped, but ignore the category filter
+        # (its own dimension never narrows itself).
         cat_extra = [store_clause, "category IS NOT NULL"] if store_clause else ["category IS NOT NULL"]
         cur.execute(
             f"""
@@ -242,27 +252,29 @@ def facet_counts(
             """,
             {**shared_params, **store_params},
         )
-        categories = {row["category"]: row["n"] for row in cur.fetchall()}
+        category_counts = {row["category"]: row["n"] for row in cur.fetchall()}
 
         # Per-store counts — always across the full scope (never narrowed
-        # to a single selected pill), but respect the category filter.
+        # to the currently-checked stores), but respect the category filter.
         scope_clause, scope_params = None, {}
         if merchant_ids:
             scope_clause, scope_params = _merchant_in_clause(merchant_ids, "fc_scope")
         merch_extra = [scope_clause] if scope_clause else []
-        if category:
-            merch_extra.append("category = %(fc_category)s")
+        merch_cat_params: dict = {}
+        if categories:
+            clause, merch_cat_params = _category_in_clause(categories, "fc_cat_merch")
+            merch_extra.append(clause)
         cur.execute(
             f"""
             SELECT merchant_id, count(*) AS n FROM active_deals
             {_where(*merch_extra)}
             GROUP BY merchant_id
             """,
-            {**shared_params, **scope_params, "fc_category": category},
+            {**shared_params, **scope_params, **merch_cat_params},
         )
         merchants = {row["merchant_id"]: row["n"] for row in cur.fetchall()}
 
-    return {"total": total, "categories": categories, "merchants": merchants}
+    return {"total": total, "categories": category_counts, "merchants": merchants}
 
 
 def get_item(item_id: int) -> dict | None:

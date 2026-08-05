@@ -101,7 +101,7 @@ def _serialize_deal(row: dict) -> dict:
 @router.get("/deals")
 def list_deals(
     q: str | None = Query(default=None, description="Keyword search on item name"),
-    category: str | None = None,
+    categories: list[str] | None = Query(default=None, description="Restrict to these categories"),
     subcategory: str | None = None,
     merchant_id: int | None = None,
     merchant_ids: list[int] | None = Query(default=None, description="Restrict to these stores (a user's selection)"),
@@ -121,7 +121,7 @@ def list_deals(
     postal, merchant_id, merchant_ids = _effective_scope(postal_code, merchant_id, merchant_ids)
 
     rows = db.search_items(
-        q=q, category=category, subcategory=subcategory, merchant_id=merchant_id,
+        q=q, categories=categories, subcategory=subcategory, merchant_id=merchant_id,
         merchant_ids=merchant_ids, postal_code=postal,
         status=status, sort=sort, sort_dir=sort_dir,
         price_units=filtered_units,
@@ -135,7 +135,7 @@ def list_deals(
 @router.get("/deals/facets")
 def deal_facets(
     q: str | None = Query(default=None),
-    category: str | None = None,
+    categories: list[str] | None = Query(default=None),
     merchant_id: int | None = None,
     merchant_ids: list[int] | None = Query(default=None),
     postal_code: str | None = Query(default=None),
@@ -155,7 +155,7 @@ def deal_facets(
     postal, merchant_id, merchant_ids = _effective_scope(postal_code, merchant_id, merchant_ids)
 
     result = db.facet_counts(
-        q=q, category=category, merchant_id=merchant_id, merchant_ids=merchant_ids,
+        q=q, categories=categories, merchant_id=merchant_id, merchant_ids=merchant_ids,
         postal_code=postal,
         status=status, price_units=filtered_units,
         expires_within_days=expires_within_days,

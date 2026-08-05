@@ -20,6 +20,7 @@ uvicorn main:app --reload
 Frontend (terminal 2):
 
 cd frontend
+rm -rf .next
 npm run dev
 
 Run Scraper:
@@ -27,4 +28,4 @@ python -m flipp_scraper.run --output results.json
 
 
 Docker Image
-docker compose up --build --scale backend=3 --scale scraper-go=1
+docker compose up --build --scale backend=1 --scale scraper-go=1

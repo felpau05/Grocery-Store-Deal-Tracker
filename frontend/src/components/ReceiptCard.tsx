@@ -34,6 +34,8 @@ export default function ReceiptCard({
           <li key={item.item_id} className="flex items-end font-mono text-[13px]">
             <Link
               href={`/item/${item.item_id}`}
+              target="_blank"
+              rel="noopener noreferrer"
               className="text-ink hover:text-sale transition-colors truncate max-w-[60%] uppercase"
               title={item.name}
             >
@@ -58,7 +60,7 @@ export default function ReceiptCard({
 
       <div className="barcode mt-4 opacity-80" aria-hidden />
       <div className="font-mono text-[9px] text-center text-ink-soft/70 mt-1 tracking-[0.3em]">
-        FLIPPWATCH·{String(plan.merchant_id).padStart(6, "0")}
+        GROCERYDEALS·{String(plan.merchant_id).padStart(6, "0")}
       </div>
     </div>
   );

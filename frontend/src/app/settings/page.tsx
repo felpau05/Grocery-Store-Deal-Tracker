@@ -6,6 +6,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchAvailableMerchants, type AvailableMerchant } from "@/lib/api";
 import { useAccount } from "@/lib/account";
 import { useToast } from "@/lib/toast";
+import { toggleChip } from "@/lib/toggleChip";
+import GlassCard, { GLASS_SURFACE_DENSE } from "@/components/GlassCard";
 
 const POSTAL_RE = /^[A-Za-z]\d[A-Za-z]\s?-?\d[A-Za-z]\d$/;
 
@@ -132,7 +134,9 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <main className="max-w-3xl mx-auto px-6 py-14">
-        <p className="font-mono text-sm text-ink-soft animate-pulse">checking your session…</p>
+        {/* No card here — raw gradient background, so --color-ink, not
+            --color-ink-soft. */}
+        <p className="font-mono text-sm text-ink animate-pulse">checking your session…</p>
       </main>
     );
   }
@@ -142,15 +146,17 @@ export default function SettingsPage() {
       <main className="max-w-md mx-auto px-6 py-14 text-center">
         <span className="stamp text-sale text-sm">Members only</span>
         <h1 className="font-display text-3xl text-ink mt-5">Settings are private</h1>
-        <p className="text-ink-soft mt-3">
+        <p className="text-ink mt-3">
           Sign in to set your postal code and pick the stores you shop at.
         </p>
-        <Link
+        <GlassCard
+          as={Link}
           href="/login"
-          className="btn-brut inline-block mt-6 px-6 py-3 bg-sale-dark text-paper font-display"
+          wrapperClassName="inline-block mt-6"
+          surfaceClassName="glow-btn px-6 py-3 bg-sale text-paper font-display"
         >
           Sign in / create account →
-        </Link>
+        </GlassCard>
       </main>
     );
   }
@@ -158,18 +164,16 @@ export default function SettingsPage() {
   return (
     <main className="max-w-3xl mx-auto px-6 py-10">
       <header className="mb-8">
-        <span className="sticker text-[11px] text-ink">Settings</span>
         <h1 className="font-display text-4xl sm:text-5xl text-ink leading-[0.95] mt-3">
-          Your account,{" "}
-          <span className="inline-block text-paper bg-sale px-2 -rotate-1">your stores</span>
+          Account
         </h1>
-        <p className="text-ink-soft mt-3 font-medium">
-          Deals and trip plans only come from the stores you pick — nobody else can see or change them.
-        </p>
       </header>
 
       {/* ── Account ──────────────────────────────────────────── */}
-      <section className="brut p-5 mb-8 flex items-center justify-between gap-4 flex-wrap">
+      <GlassCard
+        wrapperClassName="mb-8"
+        surfaceClassName={`${GLASS_SURFACE_DENSE} p-5 flex items-center justify-between gap-4 flex-wrap`}
+      >
         <div>
           <p className="font-display text-ink">{user.name}</p>
           <p className="font-mono text-[12px] text-ink-soft mt-0.5">
@@ -182,17 +186,17 @@ export default function SettingsPage() {
             toast("Signed out");
             router.push("/");
           }}
-          className="btn-brut px-4 py-2 bg-card text-ink font-mono font-bold text-[12px] uppercase"
+          className="btn-brut-ink px-4 py-2 bg-card text-ink font-mono font-bold text-[12px] uppercase"
         >
           Sign out
         </button>
-      </section>
+      </GlassCard>
 
       {/* ── Location + stores ────────────────────────────────── */}
-      <section className="brut p-5">
+      <GlassCard surfaceClassName={`${GLASS_SURFACE_DENSE} p-5`}>
         <h2 className="font-display text-ink text-lg mb-1">Your stores</h2>
         <p className="text-[13px] text-ink-soft mb-4">
-          Enter your postal code to see every store with an active flyer near you (live from Flipp), then pick the ones you shop at.
+          Enter your postal code to see every store with active deals near you, then pick the ones you want to shop at.
         </p>
 
         <form
@@ -212,7 +216,7 @@ export default function SettingsPage() {
           <button
             type="submit"
             disabled={storesLoading}
-            className="btn-brut px-4 py-2 bg-ink text-paper text-sm font-mono font-bold disabled:opacity-40"
+            className="btn-brut-ink px-4 py-2 bg-produce text-paper text-sm font-mono font-bold disabled:opacity-40"
           >
             {storesLoading ? "Searching…" : "Find stores"}
           </button>
@@ -233,11 +237,11 @@ export default function SettingsPage() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setGroceryOnly((v) => !v)}
-                  className={`text-[11px] font-mono font-bold px-2.5 py-1 border-2 transition-all ${
-                    groceryOnly
-                      ? "bg-produce text-paper border-ink shadow-[2px_2px_0_var(--color-ink)]"
-                      : "border-ink/25 text-ink-soft hover:border-ink"
-                  }`}
+                  className={`text-[11px] font-mono font-bold px-2.5 py-1 ${toggleChip(
+                    groceryOnly,
+                    "bg-produce text-paper border-ink shadow-[2px_2px_0_var(--color-shadow)]",
+                    "border-ink/25 text-ink-soft hover:border-ink",
+                  )}`}
                 >
                   🥬 Groceries only
                 </button>
@@ -267,11 +271,11 @@ export default function SettingsPage() {
                           return next;
                         })
                       }
-                      className={`w-full flex items-center gap-2.5 px-3 py-2 border-2 text-left transition-all ${
-                        checked
-                          ? "bg-tag/40 border-ink shadow-[2px_2px_0_var(--color-ink)]"
-                          : "bg-card border-ink/20 hover:border-ink"
-                      }`}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-left ${toggleChip(
+                        checked,
+                        "bg-tag/40 border-ink shadow-[2px_2px_0_var(--color-shadow)]",
+                        "bg-card border-ink/20 hover:border-ink",
+                      )}`}
                     >
                       <span
                         className={`w-4 h-4 border-2 border-ink flex items-center justify-center font-mono font-bold text-[10px] shrink-0 ${
@@ -327,16 +331,17 @@ export default function SettingsPage() {
                 View my deals →
               </Link>
             )}
-            <button
+            <GlassCard
+              as="button"
               onClick={onSave}
               disabled={saving}
-              className="btn-brut px-5 py-2.5 bg-sale-dark text-paper font-display text-sm disabled:opacity-40"
+              surfaceClassName="glow-btn px-5 py-2.5 bg-sale text-paper font-display text-sm"
             >
               {saving ? "Saving…" : "Save my stores"}
-            </button>
+            </GlassCard>
           </span>
         </div>
-      </section>
+      </GlassCard>
     </main>
   );
 }

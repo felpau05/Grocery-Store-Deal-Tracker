@@ -2,7 +2,9 @@
 
 import { useCart, type CartSource } from "@/lib/cart";
 import { useToast } from "@/lib/toast";
+import { toggleChip } from "@/lib/toggleChip";
 import CartGlyph from "./CartGlyph";
+import GlassCard from "./GlassCard";
 
 /**
  * Toggles an item on the grocery list. `source` records which deal it
@@ -54,11 +56,11 @@ export default function AddToListButton({
         }}
         aria-label={inList ? `Remove ${name} from grocery list` : `Add ${name} to grocery list`}
         title={inList ? "Remove from grocery list" : "Add to grocery list"}
-        className={`inline-flex items-center gap-1 text-[11px] font-mono font-bold px-2 py-1 border-2 transition-all ${
-          inList
-            ? "bg-produce text-paper border-ink shadow-[2px_2px_0_var(--color-ink)]"
-            : "border-ink/30 text-ink-soft hover:border-ink hover:text-ink hover:bg-tag/40"
-        }`}
+        className={`inline-flex items-center gap-1 text-[11px] font-mono font-bold px-2 py-1 ${toggleChip(
+          inList,
+          "bg-produce text-paper border-ink shadow-[2px_2px_0_var(--color-shadow)]",
+          "border-ink/30 text-ink-soft hover:border-ink hover:text-ink hover:bg-tag/40",
+        )}`}
       >
         <CartGlyph className="w-3.5 h-3.5" />
         {inList ? "✓" : "+"}
@@ -67,9 +69,10 @@ export default function AddToListButton({
   }
 
   return (
-    <button
+    <GlassCard
+      as="button"
       onClick={onToggle}
-      className={`btn-brut inline-flex items-center gap-2 font-display text-sm px-4 py-2.5 transition-colors ${
+      surfaceClassName={`glow-btn inline-flex items-center gap-2 font-display text-sm px-4 py-2.5 transition-colors ${
         inList
           ? "bg-produce text-paper"
           : "bg-tag text-ink hover:bg-tag/80"
@@ -77,6 +80,6 @@ export default function AddToListButton({
     >
       <CartGlyph className="w-4 h-4" />
       {inList ? "✓ On your list" : "Add to grocery list"}
-    </button>
+    </GlassCard>
   );
 }

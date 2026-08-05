@@ -4,46 +4,60 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useAccount } from "@/lib/account";
+import { CHIP, CHIP_ACTIVE, CHIP_QUIET } from "@/lib/chip";
 import { useCart } from "@/lib/cart";
 import CartGlyph from "./CartGlyph";
+import HeaderLiquid from "./HeaderLiquid";
 
 const TABS = [
   { href: "/", label: "Deals" },
   { href: "/list", label: "Plan a trip" },
 ];
 
-const MELON_HINT_KEY = "grocerytracker-melon-hint-seen";
+// Routes that open on a full-viewport hero the header floats over:
+// "/" (MelonHero) and "/list" (TripIntro). Both need the header out of
+// document flow so the hero can be a true h-screen.
+const HERO_ROUTES = ["/", "/list"];
+
+// Below this scroll depth on a hero page, the header is transparent
+// (floating over the hero, logo/nav still fully visible and clickable);
+// past it, its background fades in and it behaves like a normal header.
+const HERO_REVEAL_PX = 24;
 
 export default function SiteHeader() {
   const pathname = usePathname();
   const { count, openDrawer } = useCart();
   const { user, meta, scrapeStatus } = useAccount();
+  const hasHero = HERO_ROUTES.includes(pathname);
 
-  // Starts false so the server-rendered markup and the first client render
-  // agree — localStorage isn't readable during SSR, and rendering the
-  // callout optimistically would flash it for people who already dismissed it.
-  const [showMelonHint, setShowMelonHint] = useState(false);
+  // Only hero pages have something to float over — elsewhere this state
+  // never matters. Starts true (transparent) to match the server-rendered
+  // guess for a fresh hero-page load; corrected on mount from the real
+  // scroll position in case of a reload mid-scroll or back/forward nav.
+  const [atHeroTop, setAtHeroTop] = useState(true);
 
   useEffect(() => {
-    try {
-      if (window.localStorage.getItem(MELON_HINT_KEY)) return;
-    } catch {
-      return; // storage blocked — skip the hint rather than nag every load
-    }
-    // Let the page settle first; a callout that appears with the header
-    // reads as chrome, one that arrives a beat later reads as a pointer.
-    const timer = setTimeout(() => setShowMelonHint(true), 1200);
-    return () => clearTimeout(timer);
-  }, []);
+    if (!hasHero) return;
+    const onScroll = () => setAtHeroTop(window.scrollY < HERO_REVEAL_PX);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [hasHero]);
 
-  const dismissMelonHint = () => {
-    setShowMelonHint(false);
-    try {
-      window.localStorage.setItem(MELON_HINT_KEY, "1");
-    } catch {
-      // non-fatal: the hint just returns next visit
-    }
-  };
+  // `fixed` only on hero pages: the header has to float OVER the hero
+  // without occupying document flow, so MelonHero/TripIntro can be a
+  // true 100vh. Every other page keeps the original `sticky` —
+  // unaffected by any of this. Content (logo, nav, cart) stays visible
+  // and clickable either way; only the background/border/blur toggle.
+  const transparent = hasHero && atHeroTop;
+
+  /* Frosted glass, not the solid .btn-brut-ink chips used elsewhere —
+     the rind reads through them rather than being blocked out. Defined
+     in lib/chip so the deals paginator wears the same button, not a
+     hand-copied lookalike. */
+  const chipQuiet = CHIP_QUIET;
+  const chipActive = CHIP_ACTIVE;
+  const divider = transparent ? "bg-ink/20" : "bg-paper/35";
 
   // A signed-in account NEVER falls back to the example area (see
   // page.tsx's isSignedInBlocked) — so the chip must show the account's
@@ -70,15 +84,41 @@ export default function SiteHeader() {
   }, [count]);
 
   return (
-    <header className="sticky top-0 z-20 bg-paper/90 backdrop-blur-sm border-b-2 border-ink">
-      <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
-        <Link href="/" className="group flex items-center">
-          <span className="sticker text-[20px] text-ink group-hover:rotate-0 transition-transform">
-            LOCAL GROCERY STORE DEALS<span className="text-sale">!</span>
+    <header
+      className={`${hasHero ? "fixed" : "sticky"} top-0 left-0 right-0 z-20 overflow-hidden transition-all duration-300 ${
+        transparent
+          ? "bg-transparent border-b-2 border-transparent"
+          : "bg-[radial-gradient(circle,var(--color-header-from),var(--color-header-via),var(--color-header-to))] backdrop-blur-sm border-b-2 border-ink"
+      }`}
+    >
+      {/* Flowing rind over the gradient above, which stays as the
+          fallback for no-WebGL and reduced-motion. Fades out with the
+          rest of the header on the hero routes. */}
+      <HeaderLiquid active={!transparent} />
+
+      {/* Full-bleed: logo and nav sit at the true edges of the viewport,
+          same as the deals page's own grid below it. */}
+      <div className="relative z-10 w-full px-6 h-16 flex items-center justify-between">
+        <Link href="/" className="group flex items-center gap-2">
+          <span aria-hidden className="text-2xl leading-none group-hover:-rotate-12 transition-transform">
+            🍉
+          </span>
+          {/* --font-serif and --color-logo-text live in globals.css —
+              tune them there without touching --font-display or
+              --color-ink, which the rest of the header still uses.
+              Referenced via arbitrary-value brackets (not a named
+              text-logo-text/font-serif utility): named utilities
+              generated from a *brand-new* @theme token don't reliably
+              show up in dev without a full server restart, while
+              bracket syntax reads the variable directly and always
+              updates immediately — same reason shadow-[...] classes
+              elsewhere in this app never have that problem. */}
+          <span className="text-[22px] leading-none font-bold text-[var(--color-logo-text)] [font-family:var(--font-serif)]">
+            GroceryDeals
           </span>
         </Link>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-5">
           <nav className="flex items-center gap-2">
             {TABS.map((tab) => {
               const active =
@@ -87,59 +127,29 @@ export default function SiteHeader() {
                 <Link
                   key={tab.href}
                   href={tab.href}
-                  className={`text-[12px] font-mono font-bold uppercase tracking-[0.1em] px-3 py-1.5 border-2 transition-colors ${
-                    active
-                      ? "bg-ink text-paper border-ink"
-                      : "border-transparent text-ink-soft hover:border-ink hover:text-ink"
-                  }`}
+                  className={`${CHIP} uppercase tracking-[0.1em] ${active ? chipActive : chipQuiet}`}
                 >
                   {tab.label}
                 </Link>
               );
             })}
-
-            {/* Plain <a>, not next/link: the 3D toy is a standalone static
-                page in public/, not an App Router route, so it needs a real
-                navigation rather than a client-side one. */}
-            <span className="relative">
-              <a
-                href="/watermelon.html"
-                title="Play with the 3D watermelon"
-                aria-label="Play with the 3D watermelon"
-                onClick={dismissMelonHint}
-                className="flex items-center gap-1.5 bg-tag text-ink border-2 border-ink shadow-[3px_3px_0_var(--color-ink)] px-2.5 py-1.5 font-mono font-bold text-[11px] uppercase tracking-[0.08em] hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[5px_5px_0_var(--color-ink)] transition-all"
-              >
-                <span className={showMelonHint ? "" : "animate-melon"}>🍉</span>
-                <span className="hidden sm:inline">Play</span>
-              </a>
-
-              {/* First visit only — points at the button, then never
-                  returns once dismissed (or once they've gone and played). */}
-              {showMelonHint && (
-                <span className="animate-callout absolute top-full right-0 mt-2 w-max max-w-[62vw] z-30">
-                  <span className="block bg-ink text-paper border-2 border-ink shadow-[4px_4px_0_var(--color-tag)] px-3 py-2 -rotate-2">
-                    <span className="block font-display text-[12px] leading-tight">
-                      Slice a 3D watermelon 🍉
-                    </span>
-                    <button
-                      onClick={dismissMelonHint}
-                      className="mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-tag hover:text-paper transition-colors"
-                    >
-                      Got it
-                    </button>
-                  </span>
-                </span>
-              )}
-            </span>
           </nav>
 
+          {/* Divider between navigation and everything account-related
+              (status, location, sign-in, cart) — previously one flat
+              row with no grouping. */}
+          <span aria-hidden className={`w-px h-6 ${divider}`} />
+
+          {/* Everything account-related as one sub-group, tighter gap
+              than the outer nav/divider/account split above. */}
+          <div className="flex items-center gap-2">
           {/* Scraping indicator — visible on every page while an
               on-demand scrape runs for the signed-in user's area. */}
           {scrapeStatus?.running && (
             <Link
               href="/settings"
               title={`Gathering flyers for ${scrapeStatus.postal_code ?? "your area"}…`}
-              className="flex items-center gap-1.5 text-[12px] font-mono font-bold px-2.5 py-1.5 border-2 border-ink bg-produce text-paper animate-pulse"
+              className={`${CHIP} flex items-center gap-1.5 ${chipActive} animate-pulse`}
             >
               <span aria-hidden>⟳</span>
               <span>Scraping…</span>
@@ -158,11 +168,7 @@ export default function SiteHeader() {
                   ? "Showing example-area deals — sign in to set your own postal code"
                   : "Your stores drive these deals — click to change them"
               }
-              className={`flex items-center gap-1.5 text-[12px] font-mono font-bold px-2.5 py-1.5 border-2 transition-all ${
-                isExample
-                  ? "bg-tag border-ink text-ink hover:shadow-[2px_2px_0_var(--color-ink)]"
-                  : "border-ink/25 text-ink hover:border-ink"
-              }`}
+              className={`${CHIP} flex items-center gap-1.5 ${chipQuiet}`}
             >
               <span aria-hidden>📍</span>
               {activePostal}
@@ -173,7 +179,7 @@ export default function SiteHeader() {
               <Link
                 href="/settings"
                 title="Set your postal code to see deals near you"
-                className="flex items-center gap-1.5 text-[12px] font-mono font-bold px-2.5 py-1.5 border-2 border-ink/25 text-ink hover:border-ink transition-all"
+                className={`${CHIP} flex items-center gap-1.5 ${chipQuiet}`}
               >
                 <span aria-hidden>📍</span>
                 <span>Set postal code</span>
@@ -183,12 +189,8 @@ export default function SiteHeader() {
 
           <Link
             href={user ? "/settings" : "/login"}
-            className={`text-[12px] font-mono font-bold px-3 py-1.5 border-2 transition-all ${
-              pathname.startsWith(user ? "/settings" : "/login")
-                ? "bg-ink text-paper border-ink"
-                : user
-                  ? "border-ink/25 text-ink hover:border-ink"
-                  : "bg-tag border-ink text-ink shadow-[2px_2px_0_var(--color-ink)]"
+            className={`${CHIP} ${
+              pathname.startsWith(user ? "/settings" : "/login") ? chipActive : chipQuiet
             }`}
             title={user ? `${user.name} · ${user.postal_code ?? "no postal code"}` : "Sign in to set your stores"}
           >
@@ -201,7 +203,7 @@ export default function SiteHeader() {
           <button
             onClick={openDrawer}
             aria-label={`Open grocery list, ${count} ${count === 1 ? "item" : "items"}`}
-            className="btn-brut relative p-2 bg-card text-ink hover:bg-tag transition-colors"
+            className={`${CHIP} relative p-2 ${chipQuiet}`}
           >
             <CartGlyph className="w-5 h-5" />
             {count > 0 && (
@@ -214,6 +216,7 @@ export default function SiteHeader() {
               </span>
             )}
           </button>
+          </div>
         </div>
       </div>
     </header>

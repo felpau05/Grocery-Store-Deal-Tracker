@@ -100,6 +100,14 @@
   }
   #back-link:hover { background: rgba(255, 255, 255, 0.65); }
   #back-link:active { transform: scale(0.96); }
+
+  /* ── Hero embed mode ────────────────────────────────────────────
+     Transparent so the parent React section owns the background
+     (keeps the melon on-palette without editing this file). Controls
+     hidden, but pointer events stay ON — drag-to-spin and click-to-
+     slice are the whole point of putting it in the hero. */
+  html, body { background: transparent !important; overflow: hidden; }
+  .ui-group, #back-link { display: none !important; }
 </style>
 </head>
 <body>
@@ -145,13 +153,13 @@
   const CONFIG = {
     // How strongly a drag spins the melon. LOWER = feels heavier /
     // harder to get spinning. (try 0.002 for very heavy, 0.01 for light)
-    DRAG_SENSITIVITY: 0.0038,
+    DRAG_SENSITIVITY: 0.00145,
 
     // Momentum retention per frame after release. HIGHER = spins longer.
     INERTIA_DECAY: 0.995,
 
     // Same two knobs but for rotating an individual piece in place.
-    PIECE_DRAG_SENSITIVITY: 0.006,
+    PIECE_DRAG_SENSITIVITY: 0.00145,
     PIECE_INERTIA_DECAY: 0.992,
 
     // How much each ◀ / ▶ button press changes the idle spin (rad/s).
@@ -804,7 +812,11 @@
   const camera = new THREE.PerspectiveCamera(38, wrapEl.clientWidth / wrapEl.clientHeight, 0.1, 100);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  /* 1.5, not 2. Fragment cost is the square of this, so 2 renders 78%
+     more pixels than 1.5 for a scene of smooth curved surfaces whose
+     only hard edges — the silhouette and the cut faces — are already
+     being handled by MSAA (antialias: true above). */
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
   renderer.setSize(wrapEl.clientWidth, wrapEl.clientHeight);
   wrapEl.appendChild(renderer.domElement);
 
@@ -1035,8 +1047,260 @@
   }
   rebuildMeshMap();
 
+  /* ── Intro: the melon arrives in pieces and knits itself together ──
+     Deliberately kept outside the cluster/collision system: it only
+     nudges each wedge's LOCAL offset inside the single starting
+     cluster, so colliders, slicing and gravity all still believe
+     they're looking at one whole melon the entire time. That's why it
+     can't desync anything — and why it must bow out the moment the
+     visitor slices or drops, since makeCluster() reassigns these same
+     local positions when a cluster splits. */
+  const INTRO_SECS = 2.8;
+  const INTRO_SPREAD = 2.4;   // world units the wedges start apart
+  let introT = 0;
+  let introDone = false;
+  const introDirs = [];
+  for (let i = 0; i < WEDGES; i++) introDirs.push(midDir(i, 1));
+
+  function endIntro() {
+    introDone = true;
+    for (let i = 0; i < WEDGES; i++) wedgeGroups[i].rotation.y = 0;
+    // Only safe to re-seat wedges while the melon is still one piece;
+    // once split, each wedge belongs to a child cluster with its own
+    // cNeg that makeCluster() has already applied.
+    if (clusters.length === 1) {
+      for (let i = 0; i < WEDGES; i++) wedgeGroups[i].position.copy(clusters[0].cNeg);
+    }
+  }
+
+  function stepIntro(dt) {
+    if (introDone) return;
+    if (gravityOn || clusters.length > 1) { endIntro(); return; }
+
+    introT += dt / INTRO_SECS;
+    if (introT >= 1) { endIntro(); return; }
+
+    // easeOutCubic — the pieces close most of the distance early, then
+    // ease the last of the seam shut instead of arriving at full speed.
+    const k = 1 - Math.pow(1 - introT, 3);
+    const out = INTRO_SPREAD * (1 - k);
+    const cNeg = clusters[0].cNeg;
+    for (let i = 0; i < WEDGES; i++) {
+      const d = introDirs[i];
+      wedgeGroups[i].position.set(
+        cNeg.x + d.x * out,
+        // Alternating lift so they don't all converge on one flat plane.
+        cNeg.y + (i % 2 ? 1 : -1) * out * 0.28,
+        cNeg.z + d.z * out
+      );
+      // A slight unwind about the melon's axis, so they screw shut
+      // rather than sliding straight in.
+      wedgeGroups[i].rotation.y = (1 - k) * (i % 2 ? 0.42 : -0.42);
+    }
+  }
+
+  // Seed the exploded pose now, so the very first rendered frame is
+  // already apart — otherwise the melon shows up whole for one frame
+  // and visibly pops open before it starts closing.
+  stepIntro(0);
+
+  /* ── Healing: sliced pieces drift back together on their own ───────
+     This IS mergeAction(), just animated into it. mergeAction()
+     re-parents the wedges back onto the parent group at the parent's
+     own transform, which is instant and would snap pieces across
+     whatever gap they'd drifted to. So instead each child is tweened to
+     exactly the pose it was born at — the parent's position plus the
+     shift splitCluster gave it, and the parent's rotation — and only
+     once it lands there is mergeAction() called. At that instant
+     nothing needs to move, so the merge itself is invisible.
+
+     That target pose is also the answer to spun/dragged pieces: it's
+     recomputed from the parent's transform, not from where the piece
+     happens to be, so both position AND rotation are carried back. A
+     piece the visitor tumbled sideways rotates upright on the way in
+     rather than jumping upright at the merge.
+
+     The tween drives group.position/quaternion directly instead of
+     going through targetPos, because the generic per-frame lerp is
+     asymptotic — it approaches forever and never actually arrives,
+     which is how this first version stalled just short of closed. */
+  const HEAL_DELAY = 2.2;   // seconds of calm before pieces start closing
+  const HEAL_SECS = 2.6;    // how long one pair takes to close
+  const HEAL_BEAT = 0.7;    // pause between consecutive merges
+  /* Spin-down before the close. A pair that's still turning used to have
+     its spin zeroed on the first frame of the tween and its rotation
+     slerped straight to upright — a visible snap. Instead the pair now
+     spends a `settle` phase shedding spin under extra damping, and only
+     once it's turning slowly enough does the close (which is what
+     carries the orientation home) actually begin. */
+  const HEAL_SPIN_DAMP = 0.99;   // per 1/60s, ON TOP of PIECE_INERTIA_DECAY
+  const HEAL_SPIN_EPS = 0.05;    // rad/s under which a piece counts as "slow"
+  const HEAL_SETTLE_MAX = 10;   // seconds, so a hard-flung piece can't stall it
+  let lastTouch = 0;
+  let healPauseUntil = 0;
+  let healing = null;
+
+  function noteTouch() { lastTouch = simTime; }
+
+  /** Is this cluster one of the pair currently closing? */
+  function isHealingCluster(cl) {
+    return !!cl && !!healing && healing.action.children.indexOf(cl) !== -1;
+  }
+
+  function cancelHeal() {
+    if (!healing) return;
+    // Leave the pieces wherever the tween got to, rather than snapping
+    // them back to where it started.
+    for (const child of healing.action.children) {
+      if (clusters.indexOf(child) !== -1) child.targetPos.copy(child.group.position);
+    }
+    healing = null;
+  }
+
+  /* Oldest healable slice first — a QUEUE, where this used to read
+     actions[length-1] and unwind newest-first like a stack. So the cut
+     you made first is the one that closes first, which is what you
+     expect watching it; the stack order made the melon repair itself
+     backwards, most-recent-cut-first.
+
+     "Healable" still means both halves are intact: slice one of them
+     again and that action has a live child no more, so it's skipped
+     until its own children have closed back up. Anything not healable
+     necessarily has a LATER action that will be. */
+  function findHealable() {
+    for (let i = 0; i < actions.length; i++) {
+      const a = actions[i];
+      let ok = true;
+      for (const c of a.children) if (clusters.indexOf(c) === -1) { ok = false; break; }
+      if (ok) return a;
+    }
+    return null;
+  }
+
+  function beginHeal(a) {
+    // `from`/`to` aren't captured yet: the pair is still spinning, so
+    // the pose to tween FROM isn't known until settling finishes.
+    healing = { action: a, phase: 'settle', settleT: 0, t: 0, from: null, to: null };
+  }
+
+  function beginClosing(h) {
+    const pq = h.action.parent.group.quaternion;
+    h.phase = 'close';
+    h.t = 0;
+    h.from = h.action.children.map((c) => ({
+      pos: c.group.position.clone(),
+      quat: c.group.quaternion.clone()
+    }));
+    h.to = h.action.children.map((c) => ({
+      pos: h.action.parent.group.position.clone().add(
+        c.cNeg.clone().sub(h.action.parent.cNeg).multiplyScalar(-1).applyQuaternion(pq)
+      ),
+      quat: pq.clone()
+    }));
+  }
+
+  function stepHeal(dt) {
+    // World-level takeovers — these change what the pieces even are, so
+    // nothing can keep closing through them.
+    if (!introDone || gravityOn) {
+      cancelHeal();
+      return;
+    }
+
+    if (healing) {
+      const h = healing;
+
+      /* Grabbing one of THESE two pieces calls the close off; anything
+         happening to any other piece does not. That's the whole of the
+         interruption rule: slicing or dragging elsewhere leaves this
+         pair to finish, and a slice aimed AT this pair is refused
+         outright by splitCluster rather than cancelling it. */
+      if (isHealingCluster(grabbed) || isHealingCluster(activeCluster)) {
+        cancelHeal();
+        return;
+      }
+
+      /* Self-validating, rather than trusting every mutation site to
+         remember cancelHeal(). The action must still exist and both its
+         halves must still be live clusters — the pair can't close onto
+         a parent that something else already merged away. This no
+         longer cares WHERE in the queue the action sits: merging is by
+         identity now (mergeAction), not by popping the stack top, so a
+         newer slice arriving underneath is no longer a problem. */
+      if (actions.indexOf(h.action) === -1 ||
+          clusters.indexOf(h.action.children[0]) === -1 ||
+          clusters.indexOf(h.action.children[1]) === -1) {
+        cancelHeal();
+        return;
+      }
+
+      /* Settle: bleed off spin before closing. The main loop still
+         rotates and decays these two normally — this only adds damping
+         on top, so they visibly wind down instead of stopping dead. */
+      if (h.phase === 'settle') {
+        const damp = Math.pow(HEAL_SPIN_DAMP, dt * 60);
+        let fastest = 0;
+        for (const child of h.action.children) {
+          child.spinVel.multiplyScalar(damp);
+          fastest = Math.max(fastest, child.spinVel.length());
+          // Hold station while they slow — no drifting toward the seam
+          // until the close proper takes over.
+          child.targetPos.copy(child.group.position);
+        }
+        h.settleT += dt;
+        if (fastest < HEAL_SPIN_EPS || h.settleT >= HEAL_SETTLE_MAX) beginClosing(h);
+        return;
+      }
+
+      h.t = Math.min(1, h.t + dt / HEAL_SECS);
+      // easeInOutCubic — eases away from rest, coasts, settles shut,
+      // instead of the exponential lerp's lurch-then-crawl.
+      const k = h.t < 0.5
+        ? 4 * h.t * h.t * h.t
+        : 1 - Math.pow(-2 * h.t + 2, 3) / 2;
+
+      for (let i = 0; i < h.action.children.length; i++) {
+        const child = h.action.children[i];
+        child.group.position.lerpVectors(h.from[i].pos, h.to[i].pos, k);
+        child.group.quaternion.copy(h.from[i].quat).slerp(h.to[i].quat, k);
+        // Park the two systems that would otherwise drag these pieces
+        // off the tween's path: the generic targetPos lerp, and spin.
+        child.targetPos.copy(child.group.position);
+        child.spinVel.set(0, 0);
+        // Closing pieces must be allowed through each other's
+        // colliders. Without this the solver holds them apart at
+        // contact distance and they never actually reconnect.
+        child.noCollideUntil = simTime + 0.2;
+      }
+
+      if (h.t >= 1) {
+        healing = null;
+        // By identity, not by popping the stack — this action may well
+        // have newer ones sitting behind it in the queue.
+        mergeAction(h.action);
+        healPauseUntil = simTime + HEAL_BEAT; // a beat before the next pair
+      }
+      return;
+    }
+
+    if (clusters.length < 2) return;
+    // Don't START a close while a piece is being handled — but note this
+    // is only a gate on starting. A close already under way rides out
+    // slices and drags aimed anywhere else (see above).
+    if (dragMode || activeCluster || grabbed) return;
+    if (simTime < healPauseUntil) return;
+    if (simTime - lastTouch < HEAL_DELAY) return;
+
+    const a = findHealable();
+    if (a) beginHeal(a);
+  }
+
   function splitCluster(cl) {
     if (cl.count < 2 || gravityOn) return;
+    /* A piece that's mid-close ignores the blade: the pair carries on
+       merging rather than being cut apart again halfway home. Slicing
+       any OTHER piece is unaffected and doesn't disturb the close. */
+    if (isHealingCluster(cl)) return;
     melonGroup.remove(cl.group);
     const half = cl.count / 2;
     const children = [];
@@ -1057,6 +1321,10 @@
     clusters = clusters.filter((c) => c !== cl).concat(children);
     actions.push({ type: 'slice', parent: cl, children });
     rebuildMeshMap();
+    // Deliberately no cancelHeal(): a pair already closing keeps closing
+    // while you cut somewhere else. noteTouch only pushes back when the
+    // NEXT pair is allowed to start.
+    noteTouch();
   }
 
   const dropBtn = document.getElementById('drop');
@@ -1125,10 +1393,17 @@
     dropBtn.title = 'Drop everything';
   }
 
-  function undo() {
-    if (gravityOn) return;
-    const a = actions.pop();
-    if (!a) return;
+  /* Merge one specific action, wherever it sits in the queue — the
+     healer closes the OLDEST healable pair, which is rarely the last
+     one pushed. Splicing from the middle is safe precisely because of
+     the healable test: an action whose children are both still live has
+     nothing built on top of it (splitting a child would have pushed a
+     later action and taken that child out of `clusters`), so no other
+     action can refer to what this one consumes. */
+  function mergeAction(a) {
+    const idx = actions.indexOf(a);
+    if (idx === -1) return;
+    actions.splice(idx, 1);
     for (const child of a.children) {
       melonGroup.remove(child.group);
       for (let i = child.start; i < child.start + child.count; i++) {
@@ -1139,6 +1414,22 @@
     melonGroup.add(a.parent.group);
     clusters = clusters.filter((c) => !a.children.includes(c)).concat([a.parent]);
     rebuildMeshMap();
+  }
+
+  function undo() {
+    if (gravityOn) return;
+    // A manual undo (or reset) mid-heal would merge the very action the
+    // tween is animating, leaving it pointing at dead clusters. Harmless
+    // no-op when the heal itself is the caller — it clears `healing`
+    // before calling in.
+    cancelHeal();
+    // Undo is still newest-first, whatever order the healer prefers —
+    // "undo" means the last thing YOU did. The newest action is always
+    // healable by construction (nothing can have split its children
+    // without pushing something newer still), so this never orphans.
+    const a = actions[actions.length - 1];
+    if (!a) return;
+    mergeAction(a);
   }
 
   function resetAll() {
@@ -1171,7 +1462,7 @@
   const WORLD_X = new THREE.Vector3(1, 0, 0);
   const WORLD_Y = new THREE.Vector3(0, 1, 0);
   const tumbleVel = new THREE.Vector2();
-  let spinSpeed = 0.22;
+  let spinSpeed = 0.16;  // hero idle
   let rotationPaused = false;
 
   function applyTumble(rx, ry) {
@@ -1299,11 +1590,12 @@
     }
     dragMode = null;
     activeCluster = null;
+    noteTouch();
     wrapEl.classList.remove('dragging');
   });
 
-  let camDist = 6.8;
-  let targetDist = 6.8;
+  let camDist = 7.2;
+  let targetDist = 7.2;
   const MIN_DIST = 3.6, MAX_DIST = 30;
 
   document.getElementById('zoom-in').addEventListener('click', () => {
@@ -1333,6 +1625,13 @@
   // No-op when the melon is whole (nothing to push apart) or during gravity.
   function adjustSpread(sign) {
     if (gravityOn || clusters.length < 2) return;
+    // Spreading is an explicit "keep them apart" — don't immediately
+    // undo it by healing them back together. Cancelling matters as well
+    // as delaying: a running tween overwrites targetPos every frame, so
+    // without this the spread/gather buttons silently do nothing while
+    // pieces are closing.
+    cancelHeal();
+    noteTouch();
     for (const cl of clusters) {
       tmpV.copy(cl.targetPos);
       let len = tmpV.length();
@@ -1349,10 +1648,8 @@
   document.getElementById('spread').addEventListener('click', () => adjustSpread(1));
   document.getElementById('gather').addEventListener('click', () => adjustSpread(-1));
 
-  wrapEl.addEventListener('wheel', (e) => {
-    e.preventDefault();
-    targetDist = Math.max(MIN_DIST, Math.min(MAX_DIST, targetDist + e.deltaY * 0.004));
-  }, { passive: false });
+  // Wheel-to-zoom is deliberately NOT bound in hero mode: this canvas
+  // fills the hero, and preventDefault() here would trap the page scroll.
 
   function worldSphere(cl, idx, out) {
     return out.copy(cl.colliders[idx].p)
@@ -1474,12 +1771,47 @@
   let prev = performance.now();
   let t = 0;
 
+  /* Parked whenever nobody can see this: the tab is in the background,
+     or the embedding page has scrolled the hero off screen and told us
+     so (see MelonHero.tsx, which watches with an IntersectionObserver
+     and posts here — an iframe's own IntersectionObserver is relative
+     to ITS viewport, so it can't work this out for itself).
+
+     Without it this scene renders a full lit pass at the display's
+     refresh rate forever, including the entire time the visitor is
+     scrolled down reading deals. That was the single most expensive
+     thing on the page and none of it was ever visible. */
+  let parked = false;
+
+  window.addEventListener('message', (e) => {
+    if (e.origin !== window.location.origin) return;
+    if (e.data === 'melon:park') parked = true;
+    else if (e.data === 'melon:wake') parked = false;
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    // Coming back from a hidden tab, `prev` is stale by however long it
+    // was away; resetting it stops the first frame back from
+    // integrating a huge dt into the physics.
+    if (!document.hidden) prev = performance.now();
+  });
+
   function animate(now) {
     requestAnimationFrame(animate);
+
+    if (parked || document.hidden) {
+      // Keep the clock honest so the melon doesn't lurch on resume.
+      prev = now;
+      return;
+    }
+
     const dt = Math.min((now - prev) / 1000, 0.033);
     prev = now;
     t += dt;
     simTime = t;
+
+    if (!introDone) stepIntro(dt);
+    else stepHeal(dt);
 
     const decay = Math.pow(CONFIG.INERTIA_DECAY, dt * 60);
     const pieceDecay = Math.pow(CONFIG.PIECE_INERTIA_DECAY, dt * 60);
@@ -1572,7 +1904,63 @@
 
     renderer.render(scene, camera);
   }
-  requestAnimationFrame(animate);
+
+  /* ── Warm-up: pay for the first frame BEFORE the intro starts ──────
+     The freeze was never the intro's own maths (8 position writes a
+     frame, and solveCollisions is skipped while the melon is one
+     cluster). It was that the intro's first frame was also three.js's
+     first frame, which is where all of this comes due at once:
+
+       · compiling the MeshStandardMaterial + envMap program — a PBR
+         shader with reflections, one of the heavier ones three.js
+         builds, and glLinkProgram blocks
+       · uploading the 2048x1024 rind, plus flesh, floor, shadow and
+         the six envmap faces
+       · building mipmaps for all of them
+
+     So introT started advancing on precisely the frame the GPU was
+     busiest, and the pieces visibly hitched on their way in.
+
+     Doing it deliberately instead: compile and upload everything, get
+     one real frame rendered, and only then start the clock. The cost
+     hasn't gone anywhere — it's just spent while nothing is moving,
+     which is the difference between a pause before an animation and a
+     stutter inside one. rAF gaps between the steps keep it from
+     landing as one long task, so the deals page's own shader canvases
+     (which share this main thread) keep their frames too. */
+  function boot() {
+    // Position the camera first — compile() prepares what's in view.
+    camera.position.set(
+      Math.sin(camYaw) * Math.cos(camPitch) * camDist,
+      camLookY + Math.sin(camPitch) * camDist,
+      Math.cos(camYaw) * Math.cos(camPitch) * camDist
+    );
+    camera.lookAt(0, camLookY, 0);
+
+    requestAnimationFrame(() => {
+      // Shader compile + link, and every texture uploaded and mipmapped.
+      if (renderer.compile) renderer.compile(scene, camera);
+      requestAnimationFrame(() => {
+        // One real frame, so anything compile() missed is paid here too
+        // rather than on the intro's first step.
+        renderer.render(scene, camera);
+        requestAnimationFrame(() => {
+          // Tell the embedder it's safe to reveal us (MelonHero fades
+          // the iframe in on this), then start the clock. `prev` is
+          // reset last so the warm-up's own duration isn't integrated
+          // as one enormous dt on the intro's first step.
+          try {
+            if (window.parent !== window) {
+              window.parent.postMessage('melon:ready', window.location.origin);
+            }
+          } catch (err) { /* embedder on another origin — reveal is its problem */ }
+          prev = performance.now();
+          requestAnimationFrame(animate);
+        });
+      });
+    });
+  }
+  boot();
 
   window.addEventListener('resize', () => {
     camera.aspect = wrapEl.clientWidth / wrapEl.clientHeight;

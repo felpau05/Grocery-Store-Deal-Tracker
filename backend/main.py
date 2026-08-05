@@ -10,12 +10,13 @@ from fastapi.middleware.cors import CORSMiddleware
 import db
 from classifier.backfill import start_backfill_scheduler, stop_backfill_scheduler
 from config import Config
-from routes import auth, deals, optimize, users
+from routes import auth, cart, deals, optimize, users
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.ensure_user_tables()
+    db.ensure_cart_tables()
     # Classifies items scraper-go wrote with category still NULL — see
     # classifier/backfill.py for why this is async/decoupled rather
     # than inline in the scrape.
@@ -37,6 +38,7 @@ app.include_router(deals.router)
 app.include_router(optimize.router)
 app.include_router(users.router)
 app.include_router(auth.router)
+app.include_router(cart.router)
 
 
 @app.get("/health")

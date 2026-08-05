@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Deal } from "@/lib/api";
 import AddToListButton from "./AddToListButton";
+import GlassCard, { GLASS_SURFACE } from "./GlassCard";
 import PriceTag from "./PriceTag";
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -35,12 +36,6 @@ function formatSize(size: number | null, unit: "g" | "ml" | null): string | null
   return `${size} ${unit}`;
 }
 
-function unitLabel(deal: Deal): string | null {
-  if (deal.price_per_unit_label) return `/ ${deal.price_per_unit_label}`;
-  if (deal.price_unit === "each") return "/ each";
-  return null;
-}
-
 function expiryInfo(validTo: string): { label: string; urgent: boolean } {
   // Date-only strings parse as UTC midnight; pin to local so "today" is right.
   const end = new Date(validTo.length === 10 ? `${validTo}T00:00:00` : validTo);
@@ -73,7 +68,6 @@ export default function DealCard({
 }) {
   const sizeLabel = formatSize(deal.size, deal.size_unit);
   const categoryClass = deal.category ? CATEGORY_COLORS[deal.category] ?? "bg-ink/5 text-ink-soft" : null;
-  const unit = unitLabel(deal);
   const expiry = expiryInfo(deal.valid_to);
   const score =
     deal.price_per_unit !== null && categoryAvgPerUnit
@@ -81,12 +75,15 @@ export default function DealCard({
       : null;
 
   return (
-    <Link
-      href={`/item/${deal.item_id}`}
-      className="group relative overflow-hidden block bg-card border-2 border-ink shadow-[4px_4px_0_var(--color-ink)] p-4 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[7px_7px_0_var(--color-ink)] transition-all"
-    >
+    // interactive: true is the hover-lift (.deal-card-glow's own
+    // hover:-translate). `group`/`block` are added on top of the shared
+    // GLASS_SURFACE — `group` for `group-hover:text-sale` below, `block`
+    // since Link defaults to inline and this needs to be a block-level
+    // card. Neither conflicts with any GLASS_SURFACE utility, so it's
+    // safe to just append them.
+    <GlassCard as={Link} href={`/item/${deal.item_id}`} interactive surfaceClassName={`group block ${GLASS_SURFACE}`}>
       <span className="sheen" aria-hidden />
-      <div className="flex items-start gap-3 mb-3">
+      <div className="flex items-start gap-3 mb-4">
         {deal.product_image && (
           <img
             src={deal.product_image}
@@ -102,35 +99,36 @@ export default function DealCard({
           <h3 className="font-display text-ink text-[15px] leading-tight mt-0.5 group-hover:text-sale transition-colors">
             {deal.name}
           </h3>
-          {unit && (
-            <span className="inline-block font-mono text-[10px] text-ink-soft/70 mt-0.5">
-              {unit}
-            </span>
-          )}
         </div>
         <PriceTag
           price={deal.price}
+          priceUnit={deal.price_unit}
           perUnit={deal.price_per_unit}
           perUnitLabel={deal.price_per_unit_label}
           highConfidence={deal.high_confidence}
         />
       </div>
 
-      <div className="flex items-center gap-2 flex-wrap">
+      {/* One meta line instead of a separate bordered box per fact —
+          category still gets its own color-coded pill (it's the one
+          thing worth scanning for at a glance); size/brands are now
+          plain text, dot-separated, no borders of their own. Was 3
+          individually-outlined badges plus 2 more below fighting for
+          attention in two thin rows. */}
+      <div className="flex items-center gap-1.5 flex-wrap text-[11px] font-mono font-bold text-ink-soft">
         {categoryClass && (
-          <span className={`font-mono font-bold text-[10px] uppercase tracking-[0.08em] px-1.5 py-0.5 border border-current ${categoryClass}`}>
+          <span className={`uppercase tracking-[0.08em] text-[10px] px-1.5 py-0.5 ${categoryClass}`}>
             {deal.category}
           </span>
         )}
-        {sizeLabel && (
-          <span className="text-[11px] font-mono font-bold text-ink-soft">{sizeLabel}</span>
-        )}
-        {deal.brands.length > 0 && (
-          <span className="text-[11px] text-ink-soft truncate">{deal.brands.join(" · ")}</span>
+        {(sizeLabel || deal.brands.length > 0) && (
+          <span className="truncate">
+            {[sizeLabel, deal.brands.join(" · ")].filter(Boolean).join(" · ")}
+          </span>
         )}
       </div>
 
-      <div className="mt-2.5 flex items-center justify-between gap-2">
+      <div className="mt-3 flex items-center justify-between gap-2">
         {expiry.urgent ? (
           <span className="stamp text-sale-dark text-[9px]">{expiry.label}</span>
         ) : (
@@ -138,9 +136,10 @@ export default function DealCard({
         )}
         <span className="flex items-center gap-2">
           {/* Deal-o-meter: always visible — rates this price against the
-              category average of what's currently on screen. */}
+              category average of what's currently on screen. Plain text
+              now, not its own bordered badge — one less box. */}
           {score && (
-            <span className="text-[10px] font-mono font-bold uppercase text-ink bg-tag border border-ink px-1.5 py-0.5">
+            <span className="text-[10px] font-mono font-bold uppercase text-ink-soft whitespace-nowrap">
               {score.emoji} {score.label}
             </span>
           )}
@@ -157,6 +156,6 @@ export default function DealCard({
           />
         </span>
       </div>
-    </Link>
+    </GlassCard>
   );
 }

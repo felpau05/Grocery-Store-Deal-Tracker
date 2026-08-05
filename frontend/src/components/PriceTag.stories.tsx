@@ -14,15 +14,17 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {
   args: {
     price: 4.99,
+    priceUnit: "g",
     perUnit: 2.5,
     perUnitLabel: "kg",
     highConfidence: true,
   },
 };
 
-export const NoPerUnit: Story = {
+export const EachUnit: Story = {
   args: {
     price: 12.0,
+    priceUnit: "each",
     perUnit: null,
     perUnitLabel: null,
     highConfidence: true,
@@ -32,6 +34,7 @@ export const NoPerUnit: Story = {
 export const LowConfidence: Story = {
   args: {
     price: 7.49,
+    priceUnit: "ml",
     perUnit: 3.75,
     perUnitLabel: "L",
     highConfidence: false,

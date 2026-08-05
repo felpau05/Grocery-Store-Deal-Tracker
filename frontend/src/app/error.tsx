@@ -1,5 +1,8 @@
 "use client";
 
+import Link from "next/link";
+import GlassCard from "@/components/GlassCard";
+
 /**
  * Route-level error boundary — replaces Next's unstyled crash screen.
  * Catches server-component fetch failures (e.g. the backend being down
@@ -17,22 +20,29 @@ export default function ErrorPage({
       <h1 className="font-display text-3xl text-ink mt-6">
         This page hit a snag
       </h1>
-      <p className="text-ink-soft mt-3">
+      {/* No card behind this paragraph — it sits directly on the page's
+          coral gradient, so it needs the darker --color-ink, not
+          --color-ink-soft (which only clears ~2:1 there). */}
+      <p className="text-ink mt-3">
         We couldn&apos;t load this right now. It&apos;s us, not you — try again in a moment.
       </p>
       <div className="flex items-center justify-center gap-3 mt-8">
-        <button
+        {/* Co-equal actions, not primary/secondary — both wear the same
+            glow. */}
+        <GlassCard
+          as="button"
           onClick={reset}
-          className="btn-brut px-5 py-2.5 bg-ink text-paper font-mono font-bold text-sm"
+          surfaceClassName="glow-btn px-5 py-2.5 bg-produce text-paper font-mono font-bold text-sm"
         >
           Try again
-        </button>
-        <a
+        </GlassCard>
+        <GlassCard
+          as={Link}
           href="/"
-          className="btn-brut px-5 py-2.5 bg-card text-ink font-mono font-bold text-sm"
+          surfaceClassName="glow-btn px-5 py-2.5 bg-card text-ink font-mono font-bold text-sm"
         >
           ← Back to deals
-        </a>
+        </GlassCard>
       </div>
     </main>
   );

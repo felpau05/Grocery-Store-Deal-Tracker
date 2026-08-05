@@ -1,14 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { OptimizeMode } from "@/lib/api";
 import { useAccount } from "@/lib/account";
+import { BTN_CART_ADD, BTN_FOLLOWUP_CTA, BTN_NUDGE_CTA, BTN_PRIMARY_CTA } from "@/lib/button";
 import { useCart } from "@/lib/cart";
-import { useOptimize } from "@/lib/hooks";
+import { useHeroSnap, useOptimize } from "@/lib/hooks";
+import { formatSavedDate, usePlans, type SavedPlan } from "@/lib/plans";
 import { useToast } from "@/lib/toast";
+import { toggleChip } from "@/lib/toggleChip";
 import ReceiptCard from "@/components/ReceiptCard";
 import CountUp from "@/components/CountUp";
+import TripIntro from "@/components/TripIntro";
+import GlassCard, { GLASS_SURFACE_DENSE, NUDGE_BANNER_SURFACE } from "@/components/GlassCard";
 
 const SEEDS = ["milk", "eggs", "bread", "chicken", "bananas", "coffee"];
 
@@ -24,6 +29,12 @@ function formatOptionSize(size: number | null, unit: string | null): string | nu
 }
 
 export default function ListPage() {
+  // Completes a scroll off TripIntro (h-screen) onto #plan below it, or
+  // back onto the hero, rather than resting half on one and half on the
+  // other — see the hook's own comment for why this isn't plain CSS
+  // scroll-snap.
+  useHeroSnap();
+
   const { entries, add, remove, restore, clear } = useCart();
   const { user, merchantIds, loading: sessionLoading } = useAccount();
   const { toast } = useToast();
@@ -31,8 +42,59 @@ export default function ListPage() {
   const [mode, setMode] = useState<OptimizeMode>("cheapest");
   const {
     result, loading, error, build, retry,
-    picks, setPick, plans, totalCost, swappable,
+    picks, setPick, plans, totalCost, swappable, lastQueries,
   } = useOptimize();
+  const { plans: savedPlans, savePlan, removePlan, restorePlan } = usePlans();
+
+  const [isMounted, setIsMounted] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [draftName, setDraftName] = useState("");
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  function onSaveDraft(e: React.FormEvent) {
+    e.preventDefault();
+    if (!result) return;
+    const name = draftName.trim() || null;
+    savePlan({
+      name,
+      mode: result.mode,
+      queries: lastQueries,
+      picks,
+      totalCost,
+      stops: plans.length,
+      itemCount: plans.reduce((n, p) => n + p.items.length, 0),
+      plans,
+    });
+    toast(`Saved${name ? ` "${name}"` : ""}`);
+    setDraftName("");
+    setSavingDraft(false);
+  }
+
+  async function onUseDraft(draftPlan: SavedPlan) {
+    const label = draftPlan.name ?? "your saved plan";
+    const { unavailableCount } = await build(
+      draftPlan.queries, draftPlan.mode,
+      merchantIds ?? undefined, user?.postal_code ?? undefined,
+      draftPlan.picks,
+    );
+    toast(
+      unavailableCount > 0
+        ? `${unavailableCount} item${unavailableCount === 1 ? "" : "s"} in "${label}" ${unavailableCount === 1 ? "isn't" : "aren't"} available anymore — updated to today's best price.`
+        : `Now using "${label}"`,
+    );
+  }
+
+  function onRemoveDraft(id: string) {
+    const removed = removePlan(id);
+    if (removed) {
+      toast(`Removed "${removed.name ?? "saved plan"}"`, {
+        action: { label: "Undo", onClick: () => restorePlan(removed) },
+      });
+    }
+  }
 
   function onRemove(query: string) {
     const removed = remove(query);
@@ -59,15 +121,28 @@ export default function ListPage() {
   const isSignedInNoStores = !!user && !merchantIds;
 
   return (
-    <main className="max-w-5xl mx-auto px-6 py-10">
+    <>
+      <TripIntro targetId="plan" />
+
+      {/* scroll-mt-16 == the fixed header's h-16 exactly, so the content
+          lands flush under it. Anything larger (this was scroll-mt-20)
+          stops the scroll short and leaves a strip of the intro gradient
+          showing in the gap between header and content. */}
+      {/* min-h-screen: a floor, not a target — an empty list is short
+          enough that the page barely has more scroll room than the hero
+          alone, which starved useHeroSnap's landing spot of anywhere
+          real to go (see its own comment). Guarantees genuine room to
+          scroll into regardless of how sparse the content is. */}
+      <main id="plan" className="min-h-screen max-w-5xl mx-auto px-6 py-10 scroll-mt-16">
       <header className="mb-8">
-        <span className="sticker text-[11px] text-ink">Plan a trip</span>
+        {/*<span className="sticker text-[11px] text-ink">Plan a trip</span>*/}
         <h1 className="font-display text-4xl sm:text-5xl text-ink leading-[0.95] mt-3">
-          Build your list,{" "}
-          <span className="inline-block text-paper bg-produce px-2 rotate-1">we&apos;ll route the cart</span>
+          Build your list,{"\n"}
+          we&apos;ll Find the Best Deals
         </h1>
-        <p className="text-ink-soft mt-3 max-w-xl font-medium">
-          Add what you need — here or straight from any deal card. Your list sticks around in this browser. We check every flyer, pick the cheapest spot for each item, and let you swap any pick.
+        {/* No card behind this — raw gradient background. */}
+        <p className="text-ink mt-3 max-w-xl font-medium">
+        Items from your cart appear here.
         </p>
       </header>
 
@@ -75,7 +150,7 @@ export default function ListPage() {
           building is disabled below until stores are picked. Anonymous
           visitors still get the example area, same as the deals grid. */}
       {!sessionLoading && !merchantIds && (
-        <div className="brut bg-tag/30 px-4 py-3 mb-8 flex items-center justify-between gap-4 flex-wrap">
+        <GlassCard wrapperClassName="mb-8" surfaceClassName={NUDGE_BANNER_SURFACE}>
           <p className="text-[13px] text-ink">
             <span className="font-mono font-bold uppercase tracking-[0.1em] mr-2">
               {user ? "No stores yet" : "Example data"}
@@ -84,19 +159,16 @@ export default function ListPage() {
               ? "Your account isn't tracking any stores — pick your stores to plan a trip."
               : "Trips route through our default area's stores — sign in to plan against the stores near you."}
           </p>
-          <Link
-            href={user ? "/settings" : "/login"}
-            className="btn-brut px-3.5 py-1.5 bg-sale-dark text-paper font-mono font-bold text-[12px] uppercase shrink-0"
-          >
+          <Link href={user ? "/settings" : "/login"} className={BTN_NUDGE_CTA}>
             {user ? "Pick my stores →" : "Sign in →"}
           </Link>
-        </div>
+        </GlassCard>
       )}
 
       <div className="grid lg:grid-cols-[minmax(0,360px)_1fr] gap-8">
         {/* ── Builder ──────────────────────────────────────────── */}
         <section className="lg:sticky lg:top-20 lg:self-start">
-          <div className="brut p-5">
+          <GlassCard surfaceClassName={`${GLASS_SURFACE_DENSE} p-5`}>
             <div className="flex items-baseline justify-between mb-2">
               <label className="font-display text-ink text-sm">
                 Your list
@@ -104,7 +176,7 @@ export default function ListPage() {
               {entries.length > 0 && (
                 <button
                   onClick={onClearAll}
-                  className="text-[11px] font-mono font-bold uppercase text-ink-soft/70 hover:text-sale transition-colors"
+                  className="text-[11px] font-mono font-bold uppercase text-ink-soft hover:text-sale transition-colors"
                 >
                   clear all
                 </button>
@@ -127,10 +199,7 @@ export default function ListPage() {
                 placeholder="ADD AN ITEM…"
                 className="flex-1 min-w-0 bg-paper border-2 border-ink px-3 py-2 font-mono text-sm text-ink placeholder:text-ink-soft/60 focus:bg-tag/20 outline-none transition-colors"
               />
-              <button
-                type="submit"
-                className="btn-brut px-3 py-2 bg-ink text-paper text-sm font-mono font-bold"
-              >
+              <button type="submit" className={BTN_CART_ADD}>
                 Add
               </button>
             </form>
@@ -184,7 +253,7 @@ export default function ListPage() {
             <div className="mt-5">
               <div className="relative flex bg-paper border-2 border-ink p-1">
                 <span
-                  className="absolute top-1 bottom-1 bg-ink transition-transform duration-300 ease-[cubic-bezier(0.2,0.9,0.3,1)]"
+                  className="absolute top-1 bottom-1 bg-produce transition-transform duration-300 ease-[cubic-bezier(0.2,0.9,0.3,1)]"
                   style={{
                     width: `calc(${100 / MODES.length}% - 4px)`,
                     transform: `translateX(calc(${modeIndex * 100}% + ${modeIndex * 4}px))`,
@@ -208,19 +277,27 @@ export default function ListPage() {
               </p>
             </div>
 
-            <button
+            <GlassCard
+              as="button"
               onClick={() => build(entries.map((e) => e.query), mode, merchantIds ?? undefined, user?.postal_code ?? undefined)}
-              disabled={entries.length === 0 || loading || isSignedInNoStores}
-              className="btn-brut mt-5 w-full bg-sale-dark text-paper font-display py-3 hover:bg-produce transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+              disabled={isMounted ? (entries.length === 0 || loading || isSignedInNoStores) : false}
+              suppressHydrationWarning
+              surfaceClassName={`${BTN_PRIMARY_CTA} mt-5 disabled:cursor-not-allowed`}
             >
-              {loading ? "Ringing it up…" : isSignedInNoStores ? "Pick your stores first" : "Build my trip"}
-            </button>
+              {!isMounted
+                ? "Build my trip"
+                : loading
+                ? "Ringing it up…"
+                : isSignedInNoStores
+                ? "Pick your stores first"
+                : "Build my trip"}
+            </GlassCard>
             {merchantIds && user && (
               <p className="font-mono text-[10px] text-ink-soft mt-2 text-center">
-                only checking {user.name}&apos;s {merchantIds.length} {merchantIds.length === 1 ? "store" : "stores"}
+                only checking your {merchantIds.length} {merchantIds.length === 1 ? "store" : "stores"}
               </p>
             )}
-          </div>
+          </GlassCard>
         </section>
 
         {/* ── Results ──────────────────────────────────────────── */}
@@ -231,10 +308,7 @@ export default function ListPage() {
               <p className="text-ink-soft text-sm mt-3">
                 We couldn&apos;t build your trip right now — give it another try.
               </p>
-              <button
-                onClick={retry}
-                className="btn-brut mt-4 px-4 py-2 bg-ink text-paper text-sm font-mono font-bold"
-              >
+              <button onClick={retry} className={BTN_FOLLOWUP_CTA}>
                 Retry
               </button>
             </div>
@@ -270,6 +344,34 @@ export default function ListPage() {
                   <div className="text-sm font-mono text-ink-soft mt-1.5">
                     across {plans.length} {plans.length === 1 ? "store" : "stores"}
                   </div>
+                  {savingDraft ? (
+                    <form onSubmit={onSaveDraft} className="flex gap-2 mt-3">
+                      <input
+                        value={draftName}
+                        onChange={(e) => setDraftName(e.target.value)}
+                        placeholder="Name this plan (optional)"
+                        autoFocus
+                        className="min-w-0 bg-paper border-2 border-ink px-2.5 py-1.5 font-mono text-[12px] text-ink placeholder:text-ink-soft/60 focus:bg-tag/20 outline-none transition-colors"
+                      />
+                      <button type="submit" className={BTN_CART_ADD}>
+                        Save
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSavingDraft(false)}
+                        className="text-[11px] font-mono font-bold uppercase text-ink-soft hover:text-sale transition-colors"
+                      >
+                        cancel
+                      </button>
+                    </form>
+                  ) : (
+                    <button
+                      onClick={() => setSavingDraft(true)}
+                      className="text-[11px] font-mono font-bold uppercase text-ink-soft hover:text-sale transition-colors mt-3"
+                    >
+                      💾 Save as draft
+                    </button>
+                  )}
                 </div>
                 <div
                   className="animate-stamp font-display text-produce border-[3px] border-produce px-3 py-1.5 text-center leading-none"
@@ -312,7 +414,7 @@ export default function ListPage() {
                                 title={row.name}
                                 className={`text-left text-[12px] px-2.5 py-1.5 border-2 transition-all max-w-full ${
                                   selected
-                                    ? "bg-ink text-paper border-ink shadow-[3px_3px_0_var(--color-tag)]"
+                                    ? "bg-produce text-paper border-ink shadow-[3px_3px_0_var(--color-tag)]"
                                     : "bg-card border-ink/25 text-ink-soft hover:border-ink hover:text-ink"
                                 }`}
                               >
@@ -337,7 +439,7 @@ export default function ListPage() {
               )}
 
               {result.unmatched.length > 0 && (
-                <div className="mt-8 bg-tag/25 border-2 border-ink shadow-[3px_3px_0_var(--color-ink)] px-4 py-3">
+                <div className="mt-8 bg-tag/25 border-2 border-ink shadow-[3px_3px_0_var(--color-shadow)] px-4 py-3">
                   <p className="font-display text-ink text-sm">
                     Couldn&apos;t find a deal for:
                   </p>
@@ -353,6 +455,66 @@ export default function ListPage() {
           )}
         </section>
       </div>
-    </main>
+
+      {savedPlans.length > 0 && (
+        <div className="mt-12">
+          <div className="flex items-center gap-3 mb-4">
+            <h2 className="font-display text-ink text-lg">Saved plans</h2>
+            <div className="tear-line flex-1" />
+          </div>
+          <div className="space-y-8">
+            {savedPlans.map((draftPlan) => (
+              <div key={draftPlan.id} className="animate-in">
+                <div className="flex items-center justify-between gap-4 mb-3">
+                  <div>
+                    <div className="font-display text-ink text-base">
+                      {draftPlan.name ?? "Untitled plan"}
+                    </div>
+                    <div className="font-mono text-[11px] text-ink-soft mt-0.5">
+                      {formatSavedDate(draftPlan.updatedAt)} · {draftPlan.itemCount}{" "}
+                      {draftPlan.itemCount === 1 ? "item" : "items"} · ${draftPlan.totalCost.toFixed(2)} ·{" "}
+                      {draftPlan.stops} {draftPlan.stops === 1 ? "stop" : "stops"}
+                    </div>
+                    {/* Only true for anonymous/local plans — a signed-in
+                        account's saved plans are assembled fresh from
+                        current prices on every load (see backend/db/cart.py's
+                        _assemble_plan), so there's nothing stale to caveat. */}
+                    {!user && (
+                      <p className="text-[11px] text-ink-soft/60 mt-1">
+                        Prices shown are as of this date — click “Use this plan” for today’s.
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <button
+                      onClick={() => onUseDraft(draftPlan)}
+                      disabled={loading}
+                      className={`${BTN_CART_ADD} disabled:opacity-40 disabled:cursor-not-allowed`}
+                    >
+                      Use this plan
+                    </button>
+                    <button
+                      onClick={() => onRemoveDraft(draftPlan.id)}
+                      aria-label={`Remove saved plan ${draftPlan.name ?? "untitled"}`}
+                      className="text-ink-soft/60 hover:text-sale text-lg leading-none transition-colors"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+                {draftPlan.plans.length > 0 && (
+                  <div className="grid sm:grid-cols-2 gap-x-5 gap-y-8 items-start">
+                    {draftPlan.plans.map((plan, i) => (
+                      <ReceiptCard key={`${draftPlan.id}-${plan.merchant_id}`} plan={plan} index={i} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      </main>
+    </>
   );
 }
