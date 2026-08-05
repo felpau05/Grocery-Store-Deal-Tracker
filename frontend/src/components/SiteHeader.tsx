@@ -111,8 +111,12 @@ export default function SiteHeader() {
           one row on its own, so the class reverts to a plain row and
           none of this is visible. */}
       <div className="relative z-10 w-full h-14 sm:h-16 flex items-center gap-2 sm:gap-3">
-        <Link href="/" className="group flex items-center gap-2 pl-4 sm:pl-6 shrink-0">
-          <span aria-hidden className="text-xl sm:text-2xl leading-none group-hover:-rotate-12 transition-transform">
+        <Link href="/" className="group flex items-center gap-2 pl-4 sm:pl-6 shrink-0" title="GroceryDeals — home">
+          {/* Below `sm` the wordmark is dropped entirely, not just
+              shrunk — every extra px pinned in this bookend is a px the
+              scroll-peek strip doesn't get, and the melon alone is
+              already a clear, tappable "home" mark at this size. */}
+          <span aria-hidden className="text-2xl leading-none group-hover:-rotate-12 transition-transform">
             🍉
           </span>
           {/* --font-serif and --color-logo-text live in globals.css —
@@ -125,7 +129,7 @@ export default function SiteHeader() {
               bracket syntax reads the variable directly and always
               updates immediately — same reason shadow-[...] classes
               elsewhere in this app never have that problem. */}
-          <span className="text-[17px] sm:text-[22px] leading-none font-bold text-[var(--color-logo-text)] [font-family:var(--font-serif)]">
+          <span className="hidden sm:inline text-[22px] leading-none font-bold text-[var(--color-logo-text)] [font-family:var(--font-serif)]">
             GroceryDeals
           </span>
         </Link>
