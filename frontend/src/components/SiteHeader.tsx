@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useAccount } from "@/lib/account";
-import { CHIP, CHIP_ACTIVE, CHIP_QUIET } from "@/lib/chip";
+import { CHIP, CHIP_ACTIVE, CHIP_LOOK, CHIP_QUIET } from "@/lib/chip";
 import { useCart } from "@/lib/cart";
 import CartGlyph from "./CartGlyph";
 import HeaderLiquid from "./HeaderLiquid";
@@ -97,10 +97,22 @@ export default function SiteHeader() {
       <HeaderLiquid active={!transparent} />
 
       {/* Full-bleed: logo and nav sit at the true edges of the viewport,
-          same as the deals page's own grid below it. */}
-      <div className="relative z-10 w-full px-6 h-16 flex items-center justify-between">
+          same as the deals page's own grid below it.
+
+          Below `sm`, every level here (this row, the nav+account group,
+          the account sub-group) is flex-wrap instead of the old fixed
+          h-16 + overflow-hidden — so a too-narrow line reflows onto
+          another line instead of silently clipping. Content of any
+          length (a long postal code, a long name) just reflows; nothing
+          gets cut off and invisible the way it did before. `justify-
+          between` still keeps exactly two top-level boxes (logo, the
+          nav+account group) so the group wraps as a whole unit onto its
+          own line rather than logo and its first tab awkwardly sharing
+          one — the group's OWN children are what further wrap inside
+          it once it's on its own row. */}
+      <div className="relative z-10 w-full px-4 sm:px-6 py-2.5 sm:py-0 sm:h-16 flex flex-wrap sm:flex-nowrap items-center justify-between gap-x-3 gap-y-2">
         <Link href="/" className="group flex items-center gap-2">
-          <span aria-hidden className="text-2xl leading-none group-hover:-rotate-12 transition-transform">
+          <span aria-hidden className="text-xl sm:text-2xl leading-none group-hover:-rotate-12 transition-transform">
             🍉
           </span>
           {/* --font-serif and --color-logo-text live in globals.css —
@@ -113,13 +125,13 @@ export default function SiteHeader() {
               bracket syntax reads the variable directly and always
               updates immediately — same reason shadow-[...] classes
               elsewhere in this app never have that problem. */}
-          <span className="text-[22px] leading-none font-bold text-[var(--color-logo-text)] [font-family:var(--font-serif)]">
+          <span className="text-[17px] sm:text-[22px] leading-none font-bold text-[var(--color-logo-text)] [font-family:var(--font-serif)]">
             GroceryDeals
           </span>
         </Link>
 
-        <div className="flex items-center gap-5">
-          <nav className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-2 sm:gap-5">
+          <nav className="flex items-center gap-1.5 sm:gap-2">
             {TABS.map((tab) => {
               const active =
                 tab.href === "/" ? pathname === "/" : pathname.startsWith(tab.href);
@@ -137,12 +149,16 @@ export default function SiteHeader() {
 
           {/* Divider between navigation and everything account-related
               (status, location, sign-in, cart) — previously one flat
-              row with no grouping. */}
-          <span aria-hidden className={`w-px h-6 ${divider}`} />
+              row with no grouping. Kept at every width: on the rare
+              wrap where nav and account land on separate lines it's a
+              harmless trailing/leading mark, and losing it made the two
+              groups on one line read as one undifferentiated cluster of
+              chips. */}
+          <span aria-hidden className={`w-px h-6 shrink-0 ${divider}`} />
 
           {/* Everything account-related as one sub-group, tighter gap
               than the outer nav/divider/account split above. */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
           {/* Scraping indicator — visible on every page while an
               on-demand scrape runs for the signed-in user's area. */}
           {scrapeStatus?.running && (
@@ -152,7 +168,7 @@ export default function SiteHeader() {
               className={`${CHIP} flex items-center gap-1.5 ${chipActive} animate-pulse`}
             >
               <span aria-hidden>⟳</span>
-              <span>Scraping…</span>
+              <span className="hidden sm:inline">Scraping…</span>
             </Link>
           )}
 
@@ -172,7 +188,9 @@ export default function SiteHeader() {
             >
               <span aria-hidden>📍</span>
               {activePostal}
-              {isExample && <span className="text-[9px] uppercase tracking-[0.08em] opacity-70">example</span>}
+              {isExample && (
+                <span className="hidden sm:inline text-[9px] uppercase tracking-[0.08em] opacity-70">example</span>
+              )}
             </Link>
           ) : (
             user && (
@@ -182,7 +200,7 @@ export default function SiteHeader() {
                 className={`${CHIP} flex items-center gap-1.5 ${chipQuiet}`}
               >
                 <span aria-hidden>📍</span>
-                <span>Set postal code</span>
+                <span className="hidden sm:inline">Set postal code</span>
               </Link>
             )
           )}
@@ -203,7 +221,15 @@ export default function SiteHeader() {
           <button
             onClick={openDrawer}
             aria-label={`Open grocery list, ${count} ${count === 1 ? "item" : "items"}`}
-            className={`${CHIP} relative p-2 ${chipQuiet}`}
+            /* CHIP_LOOK, not CHIP: CHIP already bakes in its own px/py,
+               and stacking a second padding utility (p-2) on top of it
+               is exactly the trap CHIP_LOOK's own definition warns
+               about — Tailwind resolves the conflict by stylesheet
+               order, not source order, so it silently made this button
+               taller than its siblings rather than sized the same.
+               CHIP_LOOK carries everything else (border, blur, press)
+               without the sizing, so this owns its padding outright. */
+            className={`${CHIP_LOOK} relative p-1.5 sm:p-2 ${chipQuiet}`}
           >
             <CartGlyph className="w-5 h-5" />
             {count > 0 && (

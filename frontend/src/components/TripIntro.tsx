@@ -310,10 +310,15 @@ export default function TripIntro({ targetId }: { targetId: string }) {
   return (
     <section
       ref={sectionRef}
-      // A true h-screen: SiteHeader goes `fixed` on this route (see
-      // HERO_ROUTES there), so it floats over the gradient instead of
-      // occupying flow and stealing 4rem off the top.
-      className="relative h-screen min-h-[440px] overflow-hidden border-b-2 border-ink
+      // A true full-viewport hero: SiteHeader goes `fixed` on this route
+      // (see HERO_ROUTES there), so it floats over the gradient instead
+      // of occupying flow and stealing 4rem off the top.
+      //
+      // h-dvh, not h-screen: see the matching comment on MelonHero — on
+      // mobile, 100vh overshoots the real visible viewport by however
+      // much address-bar chrome is on screen, so h-screen makes this
+      // taller than the phone can actually show at once.
+      className="relative h-dvh min-h-[440px] overflow-hidden border-b-2 border-ink
                  bg-[linear-gradient(135deg,var(--color-trip-pink)_0%,var(--color-trip-orange)_35%,var(--color-trip-lime)_70%,var(--color-trip-green)_100%)]"
     >
       <div ref={containerRef} className="absolute inset-0 w-full h-full" />

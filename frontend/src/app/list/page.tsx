@@ -165,7 +165,7 @@ export default function ListPage() {
         </GlassCard>
       )}
 
-      <div className="grid lg:grid-cols-[minmax(0,360px)_1fr] gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,360px)_1fr] gap-8">
         {/* ── Builder ──────────────────────────────────────────── */}
         <section className="lg:sticky lg:top-20 lg:self-start">
           <GlassCard surfaceClassName={`${GLASS_SURFACE_DENSE} p-5`}>
@@ -334,7 +334,13 @@ export default function ListPage() {
             <div className="animate-in">
               {/* Summary stamp */}
               <div className="flex items-center justify-between gap-4 mb-6 pb-5 border-b-2 border-ink">
-                <div>
+                {/* min-w-0: without it this side's automatic flex
+                    minimum is its own widest unbreakable run — the
+                    text-5xl total, which for a real (not single-digit)
+                    price is wide enough to force the whole row past the
+                    viewport on a narrow screen, taking the PLAN stamp
+                    and the page's own horizontal bounds with it. */}
+                <div className="min-w-0">
                   <div className="font-mono font-bold text-[11px] uppercase tracking-[0.18em] text-ink-soft">
                     Estimated total · {result.mode === "cheapest" ? "cheapest" : "fewest stops"}
                   </div>
@@ -374,7 +380,7 @@ export default function ListPage() {
                   )}
                 </div>
                 <div
-                  className="animate-stamp font-display text-produce border-[3px] border-produce px-3 py-1.5 text-center leading-none"
+                  className="animate-stamp shrink-0 font-display text-produce border-[3px] border-produce px-3 py-1.5 text-center leading-none"
                   aria-hidden
                 >
                   <div className="text-[10px] tracking-widest">PLAN</div>
@@ -383,7 +389,7 @@ export default function ListPage() {
               </div>
 
               {plans.length > 0 && (
-                <div className="grid sm:grid-cols-2 gap-x-5 gap-y-8 items-start">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-8 items-start">
                   {plans.map((plan, i) => (
                     <ReceiptCard key={plan.merchant_id} plan={plan} index={i} />
                   ))}
@@ -503,7 +509,7 @@ export default function ListPage() {
                   </div>
                 </div>
                 {draftPlan.plans.length > 0 && (
-                  <div className="grid sm:grid-cols-2 gap-x-5 gap-y-8 items-start">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-8 items-start">
                     {draftPlan.plans.map((plan, i) => (
                       <ReceiptCard key={`${draftPlan.id}-${plan.merchant_id}`} plan={plan} index={i} />
                     ))}

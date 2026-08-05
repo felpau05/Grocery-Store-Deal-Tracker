@@ -288,7 +288,13 @@ export default function CartDrawer() {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="QUICK ADD — e.g. eggs"
-            className="flex-1 bg-card border-2 border-ink px-3 py-2 font-mono text-sm text-ink placeholder:text-ink-soft/60 focus:bg-tag/20 outline-none transition-colors"
+            /* min-w-0: a text input's default intrinsic width (~20ch)
+               ignores flex-shrink unless this is set — every other input
+               in this codebase already has it, this one was the one
+               outlier, and on a narrow drawer it refused to shrink and
+               pushed the Add button (and the whole panel's content)
+               past the right edge. */
+            className="flex-1 min-w-0 bg-card border-2 border-ink px-3 py-2 font-mono text-sm text-ink placeholder:text-ink-soft/60 focus:bg-tag/20 outline-none transition-colors"
           />
           <button type="submit" className={BTN_CART_ADD}>
             Add

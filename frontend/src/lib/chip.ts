@@ -29,7 +29,12 @@ export const CHIP_LOOK =
      registering on it at all — hover, active, the lot. */
   "disabled:pointer-events-none disabled:cursor-not-allowed";
 
-export const CHIP = `text-[12px] px-3 py-1.5 ${CHIP_LOOK}`;
+/* Smaller by default, full size from `sm:` up — the header wears these
+   at mobile widths where every chip on the row is competing for space
+   (see SiteHeader), and the deals paginator inherits the same shrink for
+   free since it's on the shared string. The hero CTA is unaffected: it
+   builds off CHIP_LOOK directly, not this sized constant. */
+export const CHIP = `text-[10px] px-2 py-1 sm:text-[12px] sm:px-3 sm:py-1.5 ${CHIP_LOOK}`;
 
 export const CHIP_QUIET =
   "bg-ink/45 border-paper/40 text-paper hover:bg-ink/60 hover:border-paper/80";

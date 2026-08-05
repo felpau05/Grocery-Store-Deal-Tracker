@@ -11,7 +11,13 @@
     background: radial-gradient(ellipse at 50% 30%, #fff3c4 0%, #ffd66b 35%, #ff9f4a 70%, #ff6b6b 100%);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
-  #canvas-wrap { width: 100%; height: 100%; touch-action: none; cursor: grab; }
+  /* pan-y, not none: this fills the whole hero on mobile, so a plain
+     touch-action: none trapped every vertical swipe as a drag and left
+     no way to scroll past it. pan-y hands single-finger vertical swipes
+     back to the browser for scrolling; horizontal drags (spin/tumble)
+     still reach the pointer handlers below — same reasoning as the
+     wheel-to-zoom omission further down. */
+  #canvas-wrap { width: 100%; height: 100%; touch-action: pan-y; cursor: grab; }
   #canvas-wrap.dragging { cursor: grabbing; }
   .ui-group {
     position: absolute;

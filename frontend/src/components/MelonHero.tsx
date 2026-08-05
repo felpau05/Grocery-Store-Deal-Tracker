@@ -138,9 +138,15 @@ export default function MelonHero() {
   return (
     // SiteHeader is `fixed` on this page specifically (see SiteHeader.tsx)
     // so it floats over the hero instead of occupying document flow —
-    // that's what makes a true h-screen possible here without the header
-    // pushing it down.
-    <section ref={sectionRef} className="relative h-screen min-h-[640px] overflow-hidden border-b-2 border-ink">
+    // that's what makes a true full-viewport hero possible here without
+    // the header pushing it down.
+    //
+    // h-dvh, not h-screen: mobile browsers resolve 100vh to the viewport
+    // height WITHOUT the address/toolbar chrome, so the hero renders
+    // taller than what's actually on screen and the visitor has to
+    // scroll further than one screen's worth to clear it. dvh tracks the
+    // real, current viewport instead.
+    <section ref={sectionRef} className="relative h-dvh min-h-[640px] overflow-hidden border-b-2 border-ink">
       {/* Start three.js downloading now, not in 600ms when the iframe
           mounts and asks for it. React hoists this into <head>, so on a
           cold visit the 600KB is already in cache by the time the scene
