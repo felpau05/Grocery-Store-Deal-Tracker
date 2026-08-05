@@ -6,7 +6,7 @@ A Canadian grocery-flyer deal tracker: pulls weekly flyer data for major chains,
 
 ---
 
-**Jump to:** [Overview](#overview) · [Architecture](#architecture) · [Tech stack](#tech-stack) · [Production architecture](#production-architecture) · [Design decisions](#design-decisions) · [Features](#features) · [Local development](#local-development) · [Project structure](#project-structure)
+**Jump to:** [Overview](#overview) · [Production architecture](#production-architecture) · [Architecture](#architecture) · [Tech stack](#tech-stack) · [Design decisions](#design-decisions) · [Features](#features) · [Local development](#local-development) · [Project structure](#project-structure)
 
 ## Overview
 
@@ -16,6 +16,51 @@ The app scrapes flyer data from the Flipp API for chains like Walmart, Metro, Lo
 - Track 30-day price history for individual items
 - Build a grocery list and get an **optimized shopping plan** — cheapest total cost, or fewest stops
 - Keep a cart and saved trip plans that sync across devices once signed in
+
+## Production architecture
+
+- **Frontend** — deployed on AWS Amplify Hosting, git-triggered builds.
+- **Backend, scraper-go, Redis, Caddy** — self-managed on a single EC2 instance via `docker-compose.prod.yml`. Caddy terminates automatic Let's Encrypt HTTPS at `grocerytracker.duckdns.org` and reverse-proxies to the backend by Compose service name (`reverse_proxy backend:8000`) — Compose's embedded DNS resolves that name to every running replica, so `docker compose up --build --scale backend=3` horizontally scales the stateless FastAPI tier without touching the Caddyfile. `scraper-go` scales the same way for redundancy of the `/jobs/scrape` endpoint.
+- **Database** — Supabase-managed Postgres, free tier (500 MB).
+
+```mermaid
+flowchart LR
+    Client(["Browser"])
+    Caddy["Caddy\n(Let's Encrypt HTTPS)"]
+
+    subgraph Backend["backend — stateless"]
+        direction TB
+        B1["backend-1"]
+        BDots["..."]
+        BN["backend-N"]
+        B1 --- BDots --- BN
+    end
+
+    subgraph ScraperGroup["scraper-go — N replicas, 1 scrape at a time"]
+        direction TB
+        S1["scraper-go-1"]
+        SDots["..."]
+        SN["scraper-go-N"]
+        S1 --- SDots --- SN
+    end
+
+    DB[("Postgres\n(Supabase)")]
+    Redis[("Redis\nSETNX lock — only 1 wins per scrape")]
+
+    Client --> Caddy
+    Caddy -- "reverse_proxy backend:8000\n(Compose DNS round-robin)" --> B1
+    Caddy --> BN
+    B1 & BN -- "trigger scrape" --> S1
+    B1 & BN --> SN
+    B1 & BN --> DB
+    B1 & BN -.-> Redis
+    S1 & SN --> DB
+    S1 & SN -.-> Redis
+```
+
+Both tiers scale the same way (`--scale backend=N`, `--scale scraper-go=N`) — see "Splitting the scraper into Go" below for why running several `scraper-go` replicas is safe even though only one of them ever scrapes at a time.
+
+The free-tier/single-instance constraints below aren't oversights — they're handled explicitly in code.
 
 ## Architecture
 
@@ -60,41 +105,6 @@ The backend talks to Postgres directly via `psycopg2` (raw SQL, no ORM) and to `
 | **Backend** | Python 3.10, FastAPI, Uvicorn, psycopg2 (raw SQL), PyJWT + bcrypt, scikit-learn + fastText, APScheduler, Resend |
 | **Scraper** | Go 1.25, stdlib `net/http`, pgx, go-redis |
 | **Data / infra** | PostgreSQL (Supabase, pgvector + pg_trgm), Redis 7, Caddy 2, Docker Compose |
-
-## Production architecture
-
-- **Frontend** — deployed on AWS Amplify Hosting, git-triggered builds.
-- **Backend, scraper-go, Redis, Caddy** — self-managed on a single EC2 instance via `docker-compose.prod.yml`. Caddy terminates automatic Let's Encrypt HTTPS at `grocerytracker.duckdns.org` and reverse-proxies to the backend by Compose service name (`reverse_proxy backend:8000`) — Compose's embedded DNS resolves that name to every running replica, so `docker compose up --build --scale backend=3` horizontally scales the stateless FastAPI tier without touching the Caddyfile. `scraper-go` scales the same way for redundancy of the `/jobs/scrape` endpoint.
-- **Database** — Supabase-managed Postgres, free tier (500 MB).
-
-```mermaid
-flowchart LR
-    Client(["Browser"])
-    Caddy["Caddy\n(Let's Encrypt HTTPS)"]
-
-    subgraph Backend["backend (1 → N replicas, stateless)"]
-        B["backend"]
-    end
-
-    subgraph ScraperGroup["scraper-go (1 → N replicas)"]
-        S["scraper-go"]
-    end
-
-    DB[("Postgres\n(Supabase)")]
-    Redis[("Redis\nSETNX lock — only 1 wins per scrape")]
-
-    Client --> Caddy
-    Caddy -- "reverse_proxy backend:8000\n(Compose DNS round-robin)" --> B
-    B -- "trigger scrape" --> S
-    B --> DB
-    B -.-> Redis
-    S --> DB
-    S -.-> Redis
-```
-
-Both tiers scale the same way (`--scale backend=N`, `--scale scraper-go=N`) — see "Splitting the scraper into Go" below for why running several `scraper-go` replicas is safe even though only one of them ever scrapes at a time.
-
-The free-tier/single-instance constraints below aren't oversights — they're handled explicitly in code.
 
 ## Design decisions
 
