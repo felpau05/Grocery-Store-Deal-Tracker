@@ -141,12 +141,16 @@ export default function MelonHero() {
     // that's what makes a true full-viewport hero possible here without
     // the header pushing it down.
     //
-    // h-dvh, not h-screen: mobile browsers resolve 100vh to the viewport
-    // height WITHOUT the address/toolbar chrome, so the hero renders
-    // taller than what's actually on screen and the visitor has to
-    // scroll further than one screen's worth to clear it. dvh tracks the
-    // real, current viewport instead.
-    <section ref={sectionRef} className="relative h-dvh min-h-[640px] overflow-hidden border-b-2 border-ink">
+    // calc(var(--vh,1vh)*100), not h-screen/h-dvh: h-screen's 100vh
+    // resolves to the viewport height WITHOUT mobile browsers' address
+    // bar chrome, so the hero renders taller than what's on screen and
+    // the visitor has to scroll further than one screen's worth to clear
+    // it. Native `dvh` fixes THAT but overcorrects — it recalculates
+    // continuously as the chrome animates during scroll, which resizes
+    // this WebGL canvas mid-scroll and reads as the scene zooming (see
+    // ViewportHeightFix's own comment). --vh is set once per real
+    // resize/rotation, not on every scroll-driven toolbar flicker.
+    <section ref={sectionRef} className="relative h-[calc(var(--vh,1vh)*100)] min-h-[640px] overflow-hidden border-b-2 border-ink">
       {/* Start three.js downloading now, not in 600ms when the iframe
           mounts and asks for it. React hoists this into <head>, so on a
           cold visit the 600KB is already in cache by the time the scene

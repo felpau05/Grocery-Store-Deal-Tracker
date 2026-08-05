@@ -314,11 +314,13 @@ export default function TripIntro({ targetId }: { targetId: string }) {
       // (see HERO_ROUTES there), so it floats over the gradient instead
       // of occupying flow and stealing 4rem off the top.
       //
-      // h-dvh, not h-screen: see the matching comment on MelonHero — on
-      // mobile, 100vh overshoots the real visible viewport by however
-      // much address-bar chrome is on screen, so h-screen makes this
-      // taller than the phone can actually show at once.
-      className="relative h-dvh min-h-[440px] overflow-hidden border-b-2 border-ink
+      // calc(var(--vh,1vh)*100), not h-screen/h-dvh: see the matching
+      // comment on MelonHero — 100vh overshoots the real visible
+      // viewport on mobile, and native dvh overcorrects by resizing
+      // this WebGL gradient mid-scroll as Safari's chrome animates,
+      // which reads as the scene zooming. --vh only updates on a real
+      // resize/rotation.
+      className="relative h-[calc(var(--vh,1vh)*100)] min-h-[440px] overflow-hidden border-b-2 border-ink
                  bg-[linear-gradient(135deg,var(--color-trip-pink)_0%,var(--color-trip-orange)_35%,var(--color-trip-lime)_70%,var(--color-trip-green)_100%)]"
     >
       <div ref={containerRef} className="absolute inset-0 w-full h-full" />

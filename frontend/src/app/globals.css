@@ -657,6 +657,32 @@ body {
   border-bottom: 2px dotted var(--color-border-tan);
 }
 
+/* Horizontally-scrolling "peek" strip — the header's nav+account row on
+   a narrow screen (SiteHeader). Deliberately NOT shrunk or wrapped to
+   fit: it scrolls instead, and the mask fades whatever chip currently
+   sits at the edge rather than hard-clipping it — the same "there's
+   more, drag me" cue as an iOS category picker, instead of the row
+   wrapping onto a second line. Reverts to a plain, non-scrolling row
+   from `sm` up, where the content already fits without the affordance. */
+.scroll-peek-x {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-mask-image: linear-gradient(to right, transparent, black 20px, black calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, transparent, black 20px, black calc(100% - 28px), transparent);
+}
+.scroll-peek-x::-webkit-scrollbar {
+  display: none;
+}
+@media (min-width: 640px) {
+  .scroll-peek-x {
+    overflow-x: visible;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
+
 /* Sheen sweep that crosses a card on hover, like light catching glossy
    flyer paper. Driven by group-hover translate in DealCard. */
 .sheen {

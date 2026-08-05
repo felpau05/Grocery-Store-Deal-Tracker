@@ -5,6 +5,7 @@ import CartDrawer from "@/components/CartDrawer";
 import MelonCorner from "@/components/MelonCorner";
 import PageLiquid from "@/components/PageLiquid";
 import SiteHeader from "@/components/SiteHeader";
+import ViewportHeightFix from "@/components/ViewportHeightFix";
 import { AccountProvider } from "@/lib/account";
 import { CartProvider } from "@/lib/cart";
 import { PlansProvider } from "@/lib/plans";
@@ -67,6 +68,7 @@ export default function RootLayout({
             nothing against anything using a real z-index, like /list's
             own z-10 heading or SiteHeader's z-20. */}
         <PageLiquid />
+        <ViewportHeightFix />
         <ToastProvider>
           <AccountProvider>
             <CartProvider>

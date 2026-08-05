@@ -96,22 +96,22 @@ export default function SiteHeader() {
           rest of the header on the hero routes. */}
       <HeaderLiquid active={!transparent} />
 
-      {/* Full-bleed: logo and nav sit at the true edges of the viewport,
+      {/* Full-bleed: logo and cart sit at the true edges of the viewport,
           same as the deals page's own grid below it.
 
-          Below `sm`, every level here (this row, the nav+account group,
-          the account sub-group) is flex-wrap instead of the old fixed
-          h-16 + overflow-hidden — so a too-narrow line reflows onto
-          another line instead of silently clipping. Content of any
-          length (a long postal code, a long name) just reflows; nothing
-          gets cut off and invisible the way it did before. `justify-
-          between` still keeps exactly two top-level boxes (logo, the
-          nav+account group) so the group wraps as a whole unit onto its
-          own line rather than logo and its first tab awkwardly sharing
-          one — the group's OWN children are what further wrap inside
-          it once it's on its own row. */}
-      <div className="relative z-10 w-full px-4 sm:px-6 py-2.5 sm:py-0 sm:h-16 flex flex-wrap sm:flex-nowrap items-center justify-between gap-x-3 gap-y-2">
-        <Link href="/" className="group flex items-center gap-2">
+          Below `sm`, the logo and the cart are the only two things
+          pinned in place — home and "the thing you came here to check"
+          shouldn't ever require a scroll to reach. Everything between
+          them (nav, status, postal, sign-in) rides in a `.scroll-peek-x`
+          strip instead: it's deliberately NOT shrunk or wrapped to fit,
+          so on a narrow screen it scrolls, and whichever chip lands at
+          the edge fades under the mask rather than getting hard-clipped
+          — the "there's more, drag me" cue, instead of the row folding
+          onto a second line. From `sm` up the strip already fits inside
+          one row on its own, so the class reverts to a plain row and
+          none of this is visible. */}
+      <div className="relative z-10 w-full h-14 sm:h-16 flex items-center gap-2 sm:gap-3">
+        <Link href="/" className="group flex items-center gap-2 pl-4 sm:pl-6 shrink-0">
           <span aria-hidden className="text-xl sm:text-2xl leading-none group-hover:-rotate-12 transition-transform">
             🍉
           </span>
@@ -130,120 +130,119 @@ export default function SiteHeader() {
           </span>
         </Link>
 
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-2 sm:gap-5">
-          <nav className="flex items-center gap-1.5 sm:gap-2">
-            {TABS.map((tab) => {
-              const active =
-                tab.href === "/" ? pathname === "/" : pathname.startsWith(tab.href);
-              return (
-                <Link
-                  key={tab.href}
-                  href={tab.href}
-                  className={`${CHIP} uppercase tracking-[0.1em] ${active ? chipActive : chipQuiet}`}
-                >
-                  {tab.label}
-                </Link>
-              );
-            })}
-          </nav>
+        <div className="scroll-peek-x flex-1 min-w-0 h-full">
+          {/* w-max: lets this row size to its actual content instead of
+              being squeezed to fit the strip — that's what makes it
+              genuinely overflow (and thus scroll/peek) on mobile rather
+              than every chip just shrinking. sm:w-full + sm:justify-end
+              restores the original "hugs the right edge" desktop
+              layout once the strip stops scrolling. */}
+          <div className="flex items-center gap-1.5 sm:gap-2 h-full w-max pr-8 sm:w-full sm:justify-end sm:pr-0">
+            <nav className="flex items-center gap-1.5 sm:gap-2">
+              {TABS.map((tab) => {
+                const active =
+                  tab.href === "/" ? pathname === "/" : pathname.startsWith(tab.href);
+                return (
+                  <Link
+                    key={tab.href}
+                    href={tab.href}
+                    className={`${CHIP} uppercase tracking-[0.1em] ${active ? chipActive : chipQuiet}`}
+                  >
+                    {tab.label}
+                  </Link>
+                );
+              })}
+            </nav>
 
-          {/* Divider between navigation and everything account-related
-              (status, location, sign-in, cart) — previously one flat
-              row with no grouping. Kept at every width: on the rare
-              wrap where nav and account land on separate lines it's a
-              harmless trailing/leading mark, and losing it made the two
-              groups on one line read as one undifferentiated cluster of
-              chips. */}
-          <span aria-hidden className={`w-px h-6 shrink-0 ${divider}`} />
+            {/* Divider between navigation and everything account-related
+                (status, location, sign-in). */}
+            <span aria-hidden className={`w-px h-6 shrink-0 ${divider}`} />
 
-          {/* Everything account-related as one sub-group, tighter gap
-              than the outer nav/divider/account split above. */}
-          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-          {/* Scraping indicator — visible on every page while an
-              on-demand scrape runs for the signed-in user's area. */}
-          {scrapeStatus?.running && (
-            <Link
-              href="/settings"
-              title={`Gathering flyers for ${scrapeStatus.postal_code ?? "your area"}…`}
-              className={`${CHIP} flex items-center gap-1.5 ${chipActive} animate-pulse`}
-            >
-              <span aria-hidden>⟳</span>
-              <span className="hidden sm:inline">Scraping…</span>
-            </Link>
-          )}
-
-          {/* Always-visible postal code — so it's never ambiguous which
-              area's deals are on screen. Yellow + "example" only for a
-              true anonymous visitor; a signed-in account with no postal
-              code yet gets a prompt instead, never the example area. */}
-          {activePostal ? (
-            <Link
-              href={user ? "/settings" : "/login"}
-              title={
-                isExample
-                  ? "Showing example-area deals — sign in to set your own postal code"
-                  : "Your stores drive these deals — click to change them"
-              }
-              className={`${CHIP} flex items-center gap-1.5 ${chipQuiet}`}
-            >
-              <span aria-hidden>📍</span>
-              {activePostal}
-              {isExample && (
-                <span className="hidden sm:inline text-[9px] uppercase tracking-[0.08em] opacity-70">example</span>
-              )}
-            </Link>
-          ) : (
-            user && (
+            {/* Scraping indicator — visible on every page while an
+                on-demand scrape runs for the signed-in user's area. */}
+            {scrapeStatus?.running && (
               <Link
                 href="/settings"
-                title="Set your postal code to see deals near you"
-                className={`${CHIP} flex items-center gap-1.5 ${chipQuiet}`}
+                title={`Gathering flyers for ${scrapeStatus.postal_code ?? "your area"}…`}
+                className={`${CHIP} flex items-center gap-1.5 shrink-0 ${chipActive} animate-pulse`}
+              >
+                <span aria-hidden>⟳</span>
+                <span>Scraping…</span>
+              </Link>
+            )}
+
+            {/* Always-visible postal code — so it's never ambiguous which
+                area's deals are on screen. Yellow + "example" only for a
+                true anonymous visitor; a signed-in account with no postal
+                code yet gets a prompt instead, never the example area. */}
+            {activePostal ? (
+              <Link
+                href={user ? "/settings" : "/login"}
+                title={
+                  isExample
+                    ? "Showing example-area deals — sign in to set your own postal code"
+                    : "Your stores drive these deals — click to change them"
+                }
+                className={`${CHIP} flex items-center gap-1.5 shrink-0 ${chipQuiet}`}
               >
                 <span aria-hidden>📍</span>
-                <span className="hidden sm:inline">Set postal code</span>
+                {activePostal}
+                {isExample && (
+                  <span className="text-[9px] uppercase tracking-[0.08em] opacity-70">example</span>
+                )}
               </Link>
-            )
-          )}
-
-          <Link
-            href={user ? "/settings" : "/login"}
-            className={`${CHIP} ${
-              pathname.startsWith(user ? "/settings" : "/login") ? chipActive : chipQuiet
-            }`}
-            title={user ? `${user.name} · ${user.postal_code ?? "no postal code"}` : "Sign in to set your stores"}
-          >
-            <span aria-hidden>⌂</span>
-            <span className={user ? "hidden sm:inline sm:ml-1" : "ml-1"}>
-              {user ? user.name : "Sign in"}
-            </span>
-          </Link>
-
-          <button
-            onClick={openDrawer}
-            aria-label={`Open grocery list, ${count} ${count === 1 ? "item" : "items"}`}
-            /* CHIP_LOOK, not CHIP: CHIP already bakes in its own px/py,
-               and stacking a second padding utility (p-2) on top of it
-               is exactly the trap CHIP_LOOK's own definition warns
-               about — Tailwind resolves the conflict by stylesheet
-               order, not source order, so it silently made this button
-               taller than its siblings rather than sized the same.
-               CHIP_LOOK carries everything else (border, blur, press)
-               without the sizing, so this owns its padding outright. */
-            className={`${CHIP_LOOK} relative p-1.5 sm:p-2 ${chipQuiet}`}
-          >
-            <CartGlyph className="w-5 h-5" />
-            {count > 0 && (
-              <span
-                className={`absolute -top-2.5 -right-2.5 inline-flex items-center justify-center min-w-[20px] h-[20px] px-1 rounded-full bg-sale text-paper border-2 border-ink font-mono text-[10px] font-bold ${
-                  pulse ? "animate-badge-pulse" : ""
-                }`}
-              >
-                {count}
-              </span>
+            ) : (
+              user && (
+                <Link
+                  href="/settings"
+                  title="Set your postal code to see deals near you"
+                  className={`${CHIP} flex items-center gap-1.5 shrink-0 ${chipQuiet}`}
+                >
+                  <span aria-hidden>📍</span>
+                  <span>Set postal code</span>
+                </Link>
+              )
             )}
-          </button>
+
+            <Link
+              href={user ? "/settings" : "/login"}
+              className={`${CHIP} shrink-0 ${
+                pathname.startsWith(user ? "/settings" : "/login") ? chipActive : chipQuiet
+              }`}
+              title={user ? `${user.name} · ${user.postal_code ?? "no postal code"}` : "Sign in to set your stores"}
+            >
+              <span aria-hidden>⌂</span>
+              <span className={user ? "hidden sm:inline sm:ml-1" : "ml-1"}>
+                {user ? user.name : "Sign in"}
+              </span>
+            </Link>
           </div>
         </div>
+
+        <button
+          onClick={openDrawer}
+          aria-label={`Open grocery list, ${count} ${count === 1 ? "item" : "items"}`}
+          /* CHIP_LOOK, not CHIP: CHIP already bakes in its own px/py,
+             and stacking a second padding utility (p-2) on top of it
+             is exactly the trap CHIP_LOOK's own definition warns
+             about — Tailwind resolves the conflict by stylesheet
+             order, not source order, so it silently made this button
+             taller than its siblings rather than sized the same.
+             CHIP_LOOK carries everything else (border, blur, press)
+             without the sizing, so this owns its padding outright. */
+          className={`${CHIP_LOOK} relative shrink-0 mr-4 sm:mr-6 p-1.5 sm:p-2 ${chipQuiet}`}
+        >
+          <CartGlyph className="w-5 h-5" />
+          {count > 0 && (
+            <span
+              className={`absolute -top-2.5 -right-2.5 inline-flex items-center justify-center min-w-[20px] h-[20px] px-1 rounded-full bg-sale text-paper border-2 border-ink font-mono text-[10px] font-bold ${
+                pulse ? "animate-badge-pulse" : ""
+              }`}
+            >
+              {count}
+            </span>
+          )}
+        </button>
       </div>
     </header>
   );
