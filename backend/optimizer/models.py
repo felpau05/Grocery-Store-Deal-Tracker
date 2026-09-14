@@ -32,6 +32,10 @@ class PlanItem:
     item_id: int
     name: str
     price: float
+    # For the full shopping-list view, which shows what to actually pick
+    # off the shelf. Defaults to None so older deal dicts (tests) still
+    # build a plan.
+    product_image: str | None = None
 
 
 @dataclass

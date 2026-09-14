@@ -5,11 +5,19 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { googleLoginUrl } from "@/lib/api";
 import { useAccount } from "@/lib/account";
-import { BTN_PRIMARY_CTA } from "@/lib/button";
+import { BTN_PRIMARY_CTA, BTN_SECONDARY } from "@/lib/button";
 import { useToast } from "@/lib/toast";
 import GlassCard, { GLASS_SURFACE_DENSE } from "@/components/GlassCard";
 
 type Mode = "signin" | "signup";
+
+/** A clean white field: hairline at rest, accent border on focus (the
+ *  global :focus-visible outline supplies the ring). Sentence-case
+ *  placeholders — the uppercase ones read as labels shouted into the
+ *  box. */
+const FIELD =
+  "w-full rounded-control bg-surface border border-line px-3.5 py-2.5 text-sm text-ink " +
+  "placeholder:text-ink-muted focus:border-accent transition-colors";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -94,20 +102,19 @@ export default function LoginPage() {
 
   return (
     <main className="max-w-md mx-auto px-6 py-14">
-      <header className="mb-8 text-center">
-        {/*<span className="sticker text-[11px] text-ink">Members only</span>*/}
-        <h1 className="font-display text-4xl text-ink leading-[0.95] mt-4">
-          {mode === "signin" ? "Welcome back" : "Join the club"}
+      <header className="mb-6 text-center">
+        <h1 className="font-display text-3xl text-ink">
+          {mode === "signin" ? "Welcome back" : "Create your account"}
         </h1>
-        {/* No card behind this — raw gradient background. */}
-        <p className="text-ink mt-3 font-medium">
-          Your postal code, your stores, your deals.
-        </p>
+        {/* No card behind this — it sits on the page gradient, so
+            --color-ink rather than --color-ink-soft. */}
+        <p className="text-[14px] text-ink mt-2">Your postal code, your stores, your deals.</p>
       </header>
 
       <GlassCard surfaceClassName={`${GLASS_SURFACE_DENSE} p-6`}>
-        {/* Mode toggle */}
-        <div className="flex border-2 border-ink p-1 mb-5 bg-paper">
+        {/* Mode toggle — a segmented control, not two competing
+            buttons. The chosen half is the raised white one. */}
+        <div className="flex gap-1 rounded-control border border-line bg-surface-2 p-1 mb-5">
           {(["signin", "signup"] as Mode[]).map((m) => (
             <button
               key={m}
@@ -115,8 +122,11 @@ export default function LoginPage() {
                 setMode(m);
                 setError(null);
               }}
-              className={`flex-1 text-[12px] font-mono font-bold py-1.5 transition-colors ${
-                mode === m ? "bg-produce text-paper" : "text-ink-soft hover:text-ink"
+              aria-pressed={mode === m}
+              className={`flex-1 rounded-[7px] py-1.5 text-[13px] font-semibold transition-colors ${
+                mode === m
+                  ? "bg-surface text-ink shadow-soft"
+                  : "text-ink-soft hover:text-ink"
               }`}
             >
               {m === "signin" ? "Sign in" : "Create account"}
@@ -124,55 +134,74 @@ export default function LoginPage() {
           ))}
         </div>
 
-        <form onSubmit={onSubmit} className="space-y-3">
+        <form onSubmit={onSubmit} className="space-y-4">
           {mode === "signup" && (
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="YOUR NAME"
-              required
-              maxLength={40}
-              className="w-full bg-paper border-2 border-ink px-3 py-2.5 font-mono text-sm text-ink placeholder:text-ink-soft/60 focus:bg-tag/20 outline-none transition-colors"
-            />
+            <div>
+              <label htmlFor="login-name" className="label-soft block text-[13px] text-ink mb-1.5">
+                Your name
+              </label>
+              <input
+                id="login-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Alex Chen"
+                required
+                maxLength={40}
+                className={FIELD}
+              />
+            </div>
           )}
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="EMAIL"
-            required
-            className="w-full bg-paper border-2 border-ink px-3 py-2.5 font-mono text-sm text-ink placeholder:text-ink-soft/60 focus:bg-tag/20 outline-none transition-colors"
-          />
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder={mode === "signup" ? "PASSWORD (8+ CHARACTERS)" : "PASSWORD"}
-            required
-            minLength={mode === "signup" ? 8 : undefined}
-            className="w-full bg-paper border-2 border-ink px-3 py-2.5 font-mono text-sm text-ink placeholder:text-ink-soft/60 focus:bg-tag/20 outline-none transition-colors"
-          />
+          <div>
+            <label htmlFor="login-email" className="label-soft block text-[13px] text-ink mb-1.5">
+              Email
+            </label>
+            <input
+              id="login-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              required
+              className={FIELD}
+            />
+          </div>
+          <div>
+            <label htmlFor="login-password" className="label-soft block text-[13px] text-ink mb-1.5">
+              Password
+            </label>
+            <input
+              id="login-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={mode === "signup" ? "At least 8 characters" : "Your password"}
+              required
+              minLength={mode === "signup" ? 8 : undefined}
+              className={FIELD}
+            />
+          </div>
 
+          {/* danger, not the old sale green — which is now the accent, so
+              a failed sign-in used to render in exactly the colour a
+              successful one would. */}
           {error && (
-            <p className="font-mono text-[12px] text-sale-dark border-2 border-sale/40 bg-sale/10 px-3 py-2">
+            <p
+              role="alert"
+              className="rounded-control border border-danger/25 bg-danger-soft px-3.5 py-2.5 text-[13px] text-danger"
+            >
               {error}
             </p>
           )}
 
-          <GlassCard
-            as="button"
-            type="submit"
-            disabled={busy}
-            surfaceClassName={BTN_PRIMARY_CTA}
-          >
+          <GlassCard as="button" type="submit" disabled={busy} surfaceClassName={BTN_PRIMARY_CTA}>
             {busy ? "…" : mode === "signin" ? "Sign in" : "Create account"}
           </GlassCard>
         </form>
 
         <div className="flex items-center gap-3 my-5">
-          <div className="tear-line flex-1" />
-          <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-soft">or</span>
-          <div className="tear-line flex-1" />
+          <div className="rule-soft flex-1" />
+          <span className="text-[12px] text-ink-muted">or</span>
+          <div className="rule-soft flex-1" />
         </div>
 
         <button
@@ -182,7 +211,7 @@ export default function LoginPage() {
           disabled={isMounted ? !googleEnabled : false}
           title={isMounted && !googleEnabled ? "Google sign-in isn't configured yet (GOOGLE_CLIENT_ID pending)" : undefined}
           suppressHydrationWarning
-          className="btn-brut-ink w-full bg-card text-ink font-mono font-bold text-sm py-2.5 disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed"
+          className={`${BTN_SECONDARY} w-full py-2.5`}
         >
           {/* Google's official "G" mark — brand guidelines require it stay
               full-color, not tinted to match button text/disabled state. */}
@@ -194,17 +223,32 @@ export default function LoginPage() {
           </svg>
           Continue with Google
           {isMounted && !googleEnabled && (
-            <span className="block font-mono font-normal text-[10px] text-ink-soft mt-0.5">
-              coming soon — keys not configured
+            <span className="block text-[11px] font-normal text-ink-muted mt-0.5">
+              Coming soon — keys not configured
             </span>
           )}
         </button>
       </GlassCard>
 
-      {/* No card behind this — raw gradient background. */}
+      {/* No card behind this — raw page gradient, so --color-ink. */}
       <p className="text-center mt-6">
-        <Link href="/" className="font-mono font-bold text-[12px] uppercase tracking-[0.1em] text-ink hover:text-sale transition-colors">
-          ← Keep browsing the example flyer
+        <Link
+          href="/deals"
+          className="inline-flex items-center gap-1.5 rounded-control text-[13px] font-semibold text-ink hover:text-accent transition-colors"
+        >
+          <svg
+            aria-hidden
+            viewBox="0 0 16 16"
+            className="w-3.5 h-3.5 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.9"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M10 3.5 5.5 8l4.5 4.5" />
+          </svg>
+          Keep browsing the example flyer
         </Link>
       </p>
     </main>

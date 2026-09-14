@@ -1,41 +1,49 @@
 import Link from "next/link";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
-import LiquidGlow from "./LiquidGlow";
 
 /**
- * The frosted "glass card" surface: a `.deal-card-glow` wrapper (globals.css
- * — position:relative, no z-index, DOM order alone keeps the ring painted
- * behind the card) around a `<LiquidGlow />` ring and an inner surface
- * blurred over it. Four places in the app hand-wrote this exact structure
- * before this component existed — DealCard, DealsSidebar's Card(), the
- * three account-nudge banners on "/", and the search bar — byte-for-byte
+ * The app's card: a `.deal-card-glow` wrapper (globals.css) carrying the
+ * shadow, around an inner surface. Four places hand-wrote this exact
+ * structure before this component existed — DealCard, DealsSidebar's
+ * Card(), the account-nudge banners, and the search bar — byte-for-byte
  * identical in three of the four. This is that structure, once.
+ *
+ * It is no longer "glass". The name is kept because ~20 call sites
+ * import it, but the surface is opaque white with a hairline edge and a
+ * diffuse shadow; there is no blur and nothing shows through. The
+ * backdrop-blur it used to carry existed to keep text readable over the
+ * coral page gradient, and the page isn't coral any more.
+ *
+ * Two things still stand outside this component, both deliberate:
+ *   · the animated fog is the PAGE BACKGROUND (PageLiquid) and the
+ *     HEADER (HeaderLiquid) only — never a card, hero or panel surface;
+ *   · `LiquidGlow.tsx` and the `.deal-card-glow-ring` CSS still exist
+ *     and nothing renders them.
  */
 
 /** The default inner surface. DealCard, DealsSidebar's cards, and the
  *  account-nudge banners all use this verbatim — it's the shared token,
  *  not a per-caller choice.
  *
- *  `/90`, not `/80`: glass, but strong enough to actually read. `/80` was
- *  still letting the page's coral gradient bleed through enough to drop
- *  --color-ink-soft body text under WCAG AA's 4.5:1 floor at the
- *  gradient's deepest stop (measured ~3.5:1). `/90` clears it
- *  (~5.8:1) while keeping the frosted-blur feel. */
+ *  Fully opaque, unlike the `bg-card/90 backdrop-blur-md` this replaces.
+ *  That translucency was a contrast workaround: at `/80` the coral page
+ *  gradient bled through far enough to drop --color-ink-soft body text
+ *  to ~3.5:1, under WCAG AA's 4.5:1 floor, and `/90` was the minimum
+ *  that cleared it. On white over a pale page there is nothing to bleed
+ *  and ink-soft measures 6.6:1, so the blur is pure GPU cost on every
+ *  card in a 24-card grid for no legibility gain. */
 export const GLASS_SURFACE =
-  "relative overflow-hidden bg-card/90 backdrop-blur-md border border-white/40 p-4";
+  "relative overflow-hidden rounded-card bg-surface border border-line p-4";
 
-/** Same surface, denser — for panels that are mostly small body text
- *  (filters/sort sidebar, settings, login, item-detail's spec table)
- *  rather than a big headline or a product photo. Even `/90` still
- *  leaves the deepest gradient stop under 6:1, which is fine for a
- *  headline but tight for a wall of --color-ink-soft labels — `/95`
- *  holds ~6.2:1 there.
+/** Same surface, minus the padding — for panels that bring their own
+ *  (filters/sort sidebar, settings, login, item-detail's spec table).
+ *  It used to differ in opacity too (`/95` vs `/90`, to hold ~6.2:1
+ *  under a wall of small ink-soft labels); both are opaque white now,
+ *  so padding is the only remaining difference.
  *
- *  No padding baked in (unlike GLASS_SURFACE's `p-4`) — call sites
- *  migrating off `.brut p-5`/`p-6`/etc. bring their own padding, so
- *  compose it yourself: `${GLASS_SURFACE_DENSE} p-5`. */
+ *  Compose it yourself: `${GLASS_SURFACE_DENSE} p-5`. */
 export const GLASS_SURFACE_DENSE =
-  "relative overflow-hidden bg-card/95 backdrop-blur-md border border-white/40";
+  "relative overflow-hidden rounded-card bg-surface border border-line";
 
 /** The account-nudge banners' inner surface (no postal code / no stores
  *  / anonymous visitor, on "/" and "/list") — GLASS_SURFACE's border/blur
@@ -44,13 +52,13 @@ export const GLASS_SURFACE_DENSE =
  *  built by appending to GLASS_SURFACE. Shared here rather than defined
  *  per-page since both call sites were already byte-identical strings. */
 export const NUDGE_BANNER_SURFACE =
-  "relative overflow-hidden bg-card/90 backdrop-blur-md border border-white/40 px-4 py-3 flex items-center justify-between gap-4 flex-wrap";
+  "relative overflow-hidden rounded-card bg-accent-soft border border-line px-4 py-3 flex items-center justify-between gap-4 flex-wrap";
 
 type BaseProps = {
   /** Wrapper hover-lift — DealCard is the only current consumer. The
-   *  ring's own hover-grow (`.deal-card-glow:hover .deal-card-glow-ring`
-   *  in globals.css) is unconditional CSS and always applies regardless
-   *  of this prop; this only toggles the CARD's own translate. */
+   *  shadow's own hover-deepen (`.deal-card-glow:hover` in globals.css)
+   *  is unconditional CSS and always applies regardless of this prop;
+   *  this only toggles the CARD's own translate. */
   interactive?: boolean;
   /** Classes for the outer `.deal-card-glow` wrapper — spacing like
    *  `mb-6`, not surface styling. */
@@ -87,18 +95,25 @@ export default function GlassCard(props: GlassCardProps) {
   // (e.g. `as={Link}` without `href` still fails to compile) — which is
   // the boundary that actually matters to callers.
   const Surface = (as ?? "div") as any;
-  // A disabled primary CTA shouldn't glow like it's the thing to click —
-  // dim the whole wrapper (ring included), not just the button surface.
+  // A disabled primary CTA shouldn't sit proud like it's the thing to
+  // click — dim the whole wrapper (shadow included), not just the
+  // button surface.
   const isDisabledButton = as === "button" && (rest as { disabled?: boolean }).disabled;
   return (
-    // First child on purpose, no z-index: same reasoning as every other
-    // .deal-card-glow consumer — DOM order is what keeps the ring painted
-    // behind the surface, since the surface's own opaque-ish background
-    // (bg-card/90 + backdrop-blur) is what makes it look right on top.
+    // The wrapper is still its own element rather than folding
+    // .deal-card-glow into the surface: a shadow can't be cast from an
+    // element that clips its own overflow, and a GlassCard-wrapped
+    // button presses INSIDE a wrapper that holds still — see
+    // `.glow-btn` in globals.css.
+    //
+    // The lift is straight up now. It used to also translate left
+    // (-translate-x-0.5), which was correct when the card sat on a
+    // down-RIGHT offset slab — moving up-left is what widened the gap
+    // to the slab. With a centred diffuse shadow a sideways drift has
+    // nothing to move away from and just reads as the card sliding.
     <div
-      className={`deal-card-glow ${interactive ? "hover:-translate-x-0.5 hover:-translate-y-0.5 transition-transform " : ""}${isDisabledButton ? "opacity-50 " : ""}${wrapperClassName}`}
+      className={`deal-card-glow ${interactive ? "hover:-translate-y-0.5 transition-transform " : ""}${isDisabledButton ? "opacity-50 " : ""}${wrapperClassName}`}
     >
-      <LiquidGlow />
       <Surface className={surfaceClassName} {...rest}>
         {children}
       </Surface>

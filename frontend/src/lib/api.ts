@@ -77,6 +77,10 @@ export type PlanItem = {
   item_id: number;
   name: string;
   price: number;
+  /** Older locally-stored trips predate this field, so it can be absent
+   *  rather than null — the full shopping-list view falls back to its
+   *  placeholder either way. */
+  product_image?: string | null;
 };
 
 export type StorePlan = {
@@ -378,17 +382,21 @@ export function optimizeTrip(
   });
 }
 
-// ── Signed-in cart + saved trip plans ────────────────────────────────
-// Anonymous visitors never call these — lib/cart.tsx and lib/plans.tsx
-// keep a local-only cart/plans for them instead. Wire shape is snake_case
-// straight off the backend (see backend/routes/cart.py), same convention
-// as every other type in this file — conversion to the app's camelCase
-// CartEntry/SavedPlan runtime shapes happens in cart.tsx/plans.tsx, not here.
+// ── Signed-in trips ──────────────────────────────────────────────────
+// Anonymous visitors never call these — lib/trips.tsx keeps local-only
+// trips for them instead. Wire shape is snake_case straight off the
+// backend (see backend/routes/cart.py), same convention as every other
+// type in this file — conversion to the app's camelCase Trip/TripItem
+// runtime shapes happens in trips.tsx, not here.
 
-export type CartApiItem = {
+/** One row of a trip. `item_id` is the pick (null until the trip has
+ *  been built); `source_item_id` and the merchant/price/image fields
+ *  record the deal it was added from, when it was added from one. */
+export type TripItemApi = {
   query: string;
   label: string;
   item_id: number | null;
+  source_item_id: number | null;
   merchant_id: number | null;
   merchant_name: string | null;
   price: number | null;
@@ -396,23 +404,12 @@ export type CartApiItem = {
   added_at: number; // ms epoch
 };
 
-export function fetchCart(): Promise<CartApiItem[]> {
-  return authRequest("/cart", { headers: authHeaders() });
-}
-
-export function syncCart(items: CartApiItem[]): Promise<CartApiItem[]> {
-  return authRequest("/cart", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify(items),
-  });
-}
-
 export type SavedPlanApi = {
   id: number;
   name: string | null;
   updated_at: number; // ms epoch
   mode: OptimizeMode;
+  items: TripItemApi[];
   queries: string[];
   picks: Record<string, number>;
   total_cost: number;
@@ -428,12 +425,31 @@ export function fetchSavedPlans(): Promise<SavedPlanApi[]> {
 export function createSavedPlan(input: {
   name: string | null;
   mode: OptimizeMode;
-  items: { query: string; item_id: number }[];
+  items: Partial<TripItemApi>[];
 }): Promise<SavedPlanApi> {
   return authRequest("/trip-plans", {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(input),
+  });
+}
+
+export function updateSavedPlan(
+  id: number,
+  fields: { name?: string | null; mode?: OptimizeMode },
+): Promise<SavedPlanApi> {
+  return authRequest(`/trip-plans/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(fields),
+  });
+}
+
+export function replaceSavedPlanItems(id: number, items: TripItemApi[]): Promise<SavedPlanApi> {
+  return authRequest(`/trip-plans/${id}/items`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(items),
   });
 }
 

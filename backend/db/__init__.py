@@ -15,6 +15,8 @@ from .cart import (
     get_cart,
     list_saved_plans,
     replace_cart,
+    replace_saved_plan_items,
+    update_saved_plan,
 )
 from .connection import get_conn, get_cursor
 from .items import apply_classifications, upsert_item_embedding
@@ -65,4 +67,6 @@ __all__ = [
     "list_saved_plans",
     "create_saved_plan",
     "delete_saved_plan",
+    "update_saved_plan",
+    "replace_saved_plan_items",
 ]

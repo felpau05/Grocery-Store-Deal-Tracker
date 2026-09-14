@@ -4,6 +4,21 @@ import { useEffect, useRef, useState } from "react";
 import HeroLiquid from "@/components/HeroLiquid";
 
 /**
+ * ── THE LANDING FOG SWITCH ───────────────────────────────────────────
+ *
+ * `true`  → the animated WebGL "fog" (HeroLiquid's flowing watermelon
+ *           shader) drifts behind the melon, as it originally did.
+ *           This is the current, requested state (Sept 2026).
+ * `false` → the static radial gradient below it is the whole hero
+ *           background.
+ *
+ * Flipping this one value is the ENTIRE change — HeroLiquid.tsx, its
+ * shader and the scaffolding under it are all untouched and still
+ * compiled in. Nothing else needs editing to bring the fog back.
+ */
+const LANDING_FOG = true;
+
+/**
  * Full-viewport hero with the interactive 3D melon behind the copy.
  *
  * The melon is an <iframe> of /watermelon-hero.html — same reasoning as
@@ -141,16 +156,42 @@ export default function MelonHero() {
     // that's what makes a true full-viewport hero possible here without
     // the header pushing it down.
     //
-    // calc(var(--vh,1vh)*100), not h-screen/h-dvh: h-screen's 100vh
-    // resolves to the viewport height WITHOUT mobile browsers' address
-    // bar chrome, so the hero renders taller than what's on screen and
-    // the visitor has to scroll further than one screen's worth to clear
-    // it. Native `dvh` fixes THAT but overcorrects — it recalculates
-    // continuously as the chrome animates during scroll, which resizes
-    // this WebGL canvas mid-scroll and reads as the scene zooming (see
-    // ViewportHeightFix's own comment). --vh is set once per real
-    // resize/rotation, not on every scroll-driven toolbar flicker.
-    <section ref={sectionRef} className="relative h-[calc(var(--vh,1vh)*100)] min-h-[640px] overflow-hidden border-b-2 border-ink">
+    // ── EXACTLY one screen: 100svh, no more and no less ───────────
+    //
+    // Three units were tried here and only this one is right.
+    //
+    //   100vh  — the viewport with a mobile browser's toolbar HIDDEN.
+    //            Taller than what's actually on screen for as long as
+    //            the toolbar is showing, which is most of the time and
+    //            always at load. This is what left a band of hero still
+    //            visible after scrolling what should have been one full
+    //            screen past it.
+    //   100dvh — tracks the visible area live, which fixes the height
+    //            and breaks something else: it recalculates continuously
+    //            as the toolbar animates during scroll, resizing the
+    //            melon's WebGL canvas mid-scroll, which reads as the
+    //            scene zooming. See ViewportHeightFix.
+    //   --vh   — the workaround for both: measure once, update only on a
+    //            real resize. It stops the zooming, but it is a snapshot,
+    //            so any toolbar state that differs from the one at load
+    //            leaves the hero the wrong height by exactly the toolbar.
+    //
+    //   100svh — the SMALL viewport: the one on screen with the chrome
+    //            VISIBLE. It always fits, and — the part that makes it
+    //            better than dvh rather than just different — it is a
+    //            STATIC value. It does not change as the toolbar
+    //            animates, so the canvas never resizes mid-scroll and
+    //            the scene never appears to zoom. It is both halves at
+    //            once, which is why it replaces the --vh hack outright.
+    //
+    // No `min-h`. There was a min-h-[560px], and on any viewport shorter
+    // than that — a phone on its side is ~400px — it made the hero
+    // taller than the screen again, which is the whole bug. One screen
+    // means one screen at every size.
+    //
+    // useHeroSnap MEASURES #deals rather than assuming this height, so
+    // this can change freely.
+    <section ref={sectionRef} className="relative h-[100svh] overflow-hidden">
       {/* Start three.js downloading now, not in 600ms when the iframe
           mounts and asks for it. React hoists this into <head>, so on a
           cold visit the 600KB is already in cache by the time the scene
@@ -164,17 +205,19 @@ export default function MelonHero() {
           rather than fetching twice. */}
       <link rel="preload" as="script" href="/vendor/three.r128.min.js" />
       {/* Every stop is a token — edit --color-hero-* in globals.css.
-          This static gradient stays underneath the shader at all times as
-          its fallback: no WebGL, no context to spare, and the hero is
-          still a watermelon wash rather than a blank box. */}
+          With LANDING_FOG off this IS the hero background; with it on it
+          stays underneath the shader as the fallback for no WebGL / no
+          spare context, so the hero is a watermelon wash either way
+          rather than a blank box. */}
       <div
         aria-hidden
         className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_25%,var(--color-hero-from)_0%,var(--color-hero-via)_45%,var(--color-hero-to)_100%)]"
       />
 
       {/* The same flowing gradient as the trip-planner intro, on the
-          hero's own three stops. */}
-      <HeroLiquid />
+          hero's own three stops. See LANDING_FOG at the top of this
+          file — one boolean, nothing else. */}
+      {LANDING_FOG && <HeroLiquid />}
 
       {/* The dissolve heading's filter, defined once and referenced by
           #hero-dissolve below — 0x0 and aria-hidden, it draws nothing
@@ -212,7 +255,7 @@ export default function MelonHero() {
         {/* TripIntro's exact treatment (/list) — plain white, one line,
             clamp-sized rather than breakpoint steps, and a soft blurred
             shadow instead of the hard offset block the accent version
-            used. `.font-display` already uppercases via globals.css, so
+            used. `.font-hero` already uppercases via globals.css, so
             "Fresh deals near you" reads as caps like "PLAN A TRIP" does
             without the source needing to shout it. */}
         {/* `filter` (and `opacity`) are set imperatively by the scroll
@@ -226,7 +269,7 @@ export default function MelonHero() {
             property, so the two update paths can't fight. */}
         <h1
           ref={headingRef}
-          className="font-display text-white leading-[0.85] tracking-[-0.02em]
+          className="font-hero text-white leading-[0.85] tracking-[-0.02em]
                       text-[clamp(2.75rem,13vw,11rem)] drop-shadow-[0_2px_24px_rgba(0,0,0,0.18)]"
           style={{ willChange: "filter, opacity" }}
         >
@@ -257,7 +300,7 @@ export default function MelonHero() {
         href="#deals"
         aria-label="Skip to today's deals"
         className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2
-                   font-mono font-bold text-[10px] uppercase tracking-[0.18em] text-white/85
+                   text-[13px] font-semibold text-white/85
                    hover:text-white transition-colors"
       >
         See today&apos;s deals

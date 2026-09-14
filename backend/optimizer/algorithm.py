@@ -137,6 +137,16 @@ def match_options(
     return options
 
 
+def _plan_item(row: DealRow) -> PlanItem:
+    return PlanItem(
+        query=row.query,
+        item_id=row.item_id,
+        name=row.name,
+        price=row.price,
+        product_image=row.product_image,
+    )
+
+
 def _cheapest(candidates: dict[str, list[DealRow]]) -> list[StorePlan]:
     """Ignore stop count entirely — send each item to whichever store
     has it cheapest, independent of every other item."""
@@ -147,7 +157,7 @@ def _cheapest(candidates: dict[str, list[DealRow]]) -> list[StorePlan]:
         plan = plans.setdefault(
             best.merchant_id, StorePlan(merchant_id=best.merchant_id, merchant_name=best.merchant_name)
         )
-        plan.items.append(PlanItem(query=best.query, item_id=best.item_id, name=best.name, price=best.price))
+        plan.items.append(_plan_item(best))
 
     return list(plans.values())
 
@@ -220,7 +230,7 @@ def _assign_to_stores(candidates: dict[str, list[DealRow]], chosen: set[int]) ->
         plan = plans.setdefault(
             best.merchant_id, StorePlan(merchant_id=best.merchant_id, merchant_name=best.merchant_name)
         )
-        plan.items.append(PlanItem(query=best.query, item_id=best.item_id, name=best.name, price=best.price))
+        plan.items.append(_plan_item(best))
     return list(plans.values())
 
 

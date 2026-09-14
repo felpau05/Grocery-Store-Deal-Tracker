@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   optimizeTrip,
   type OptimizeMode,
@@ -51,13 +51,22 @@ export function useKonamiCode(onTrigger: () => void) {
 }
 
 /**
- * Resolves the gap between a full-screen hero and the content below it
- * to one side or the other once scrolling stops — never resting in
- * between — but overwhelmingly biased toward content. Built for "/"
- * (MelonHero) and /list (TripIntro), both exactly `h-screen`, so the
- * content-side edge is just `window.innerHeight` minus the fixed
- * header's height (see HEADER_H below — it has to leave room for the
- * header, same as scroll-mt-16 already does for an anchor click).
+ * Resolves the gap between a tall hero and the content below it to one
+ * side or the other once scrolling stops — never resting in between —
+ * but overwhelmingly biased toward content. Built for "/" (MelonHero)
+ * and /list (TripIntro).
+ *
+ * `contentId` is the id of the section directly BELOW the hero (#deals,
+ * #plan). Its measured document offset is the hero's real height, so
+ * the landing spot is that minus the fixed header's measured height (see
+ * `headerH` below — it has to leave room for the header, same as the
+ * content's own scroll-margin does for an anchor click). Measuring rather than assuming matters:
+ * both heroes used to be exactly one viewport tall, so
+ * `window.innerHeight` WAS the hero's height — it no longer is
+ * (MelonHero is deliberately shorter than a screen now, much shorter on
+ * a phone), and hard-coding the viewport would land the scroll in the
+ * middle of the grid instead of on its top edge. Omitting `contentId`
+ * keeps the old one-viewport assumption as a fallback.
  *
  * This is the FOURTH design. The previous three each taught something:
  *
@@ -82,36 +91,47 @@ export function useKonamiCode(onTrigger: () => void) {
  *    read as fast when the actual gesture wasn't, so normal scrolling
  *    kept punching through.
  *
- * So: back to "always resolve," which #2 showed is the right base
- * behaviour — but with NO free middle this time, and the hero side's
- * capture zone shrunk to almost nothing (HERO_CAPTURE_PX) rather than
- * splitting the gap down the middle. Practically: scroll anywhere in
- * the gap and stop — anywhere except the last ~60px before the true
- * top — and it resolves to content, every time. The only way to
- * actually land on the hero is to scroll almost the entire way there,
- * which is what "forcing your way up" concretely means here: no
- * velocity math, no gesture-speed guessing, just "did you go far
- * enough."
+ * 4. "Always resolve," no free middle, hero-side capture shrunk to
+ *    almost nothing. Right in principle and it shipped — but very eager
+ *    in practice: a 120px nudge on the hero answered with the full 816px
+ *    of travel, which reads as the page taking the scroll out of your
+ *    hands.
+ *
+ * FIFTH and current: resolve from BOTH ENDS, with the halves meeting in
+ * the middle. Inside HERO_CAPTURE_PX of the top it returns to the hero;
+ * past FINISH_FRACTION of the way across it finishes the trip down;
+ * otherwise the scroll stays where it was put.
+ *
+ * FINISH_FRACTION is the dial between #4 and #2, and it is set at the
+ * halfway mark: cross more than half the gap and the page finishes the
+ * job, stop short of half and it waits. That keeps #4's "a deliberate
+ * scroll always resolves" for the gestures that were actually heading
+ * somewhere, without answering a small flick with a whole screen. The
+ * cost is #2's: stop in the untouched band and the hero is partly on
+ * screen. Toward 0 this becomes #4 again; toward 1, a narrow lip at the
+ * very bottom.
+ *
+ * Separately, and a real bug in every design above: the landing spot
+ * subtracted a hardcoded 64px for the header. The header is 58px on a
+ * phone, so it parked the hero's last 6px in the strip the header does
+ * not cover — a band of the melon's red under the header at the exact
+ * position this hook drives to. It is measured now; see `headerH` in
+ * settle(). That fix is independent of the snap policy and stays.
  */
-export function useHeroSnap() {
+export function useHeroSnap(contentId?: string) {
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
     const SETTLE_MS = 150; // no native 'scrollend' fallback needed past this delay
-    // Matches SiteHeader's h-16 AND the content container's own
-    // scroll-mt-16 (#deals, #plan) — that scroll-margin is exactly why
-    // a normal anchor click lands with clearance under the fixed
-    // header instead of the header covering the content's top edge.
-    // scroll-margin only applies to anchor navigation/scrollIntoView,
-    // NOT a raw scrollTo — so without subtracting it here too, this
-    // would land 64px further down than intended and the header would
-    // cover the first 64px of #deals/#plan every time it fired.
-    const HEADER_H = 64;
-    // Only the last ~60px before the true top resolves UP; everything
-    // else in the gap, however close to the hero, resolves DOWN. This
-    // is the one knob that makes reaching the hero "hard" — shrink it
-    // further and it takes an even more deliberate scroll to get there.
+    // The first ~60px below the true top resolve back UP to the hero —
+    // the knob that makes reaching it "hard": shrink it and it takes an
+    // even more deliberate scroll to get there.
     const HERO_CAPTURE_PX = 60;
+    // Past the halfway point of the gap, finish the trip DOWN. Between
+    // the two, nothing happens — that untouched band is what stops a
+    // small flick on the hero from being answered with a full screen of
+    // travel. Toward 0 this becomes "always resolve".
+    const FINISH_FRACTION = 0.5;
 
     const settle = () => {
       // Clamped to the page's REAL max scroll, not just innerHeight -
@@ -120,10 +140,40 @@ export function useHeroSnap() {
       // screen), that nominal edge can be a position the document
       // physically doesn't reach.
       const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-      const contentTop = Math.min(window.innerHeight - HEADER_H, maxScroll);
+      // The hero's real height: the content section starts exactly where
+      // the hero ends. Re-measured every settle rather than cached, so a
+      // rotation, a font swap or a late-loading banner can't leave a
+      // stale landing spot behind.
+      const target = contentId ? document.getElementById(contentId) : null;
+      const heroBottom = target
+        ? target.getBoundingClientRect().top + window.scrollY
+        : window.innerHeight;
+      /* How much of the top of the screen the fixed header covers.
+         MEASURED, not a constant — this was `const HEADER_H = 64`, and
+         64 is only right on a desktop. The header bar is `h-14 sm:h-16`
+         plus a 2px bottom border, so it is 58px below 640px wide and
+         66px above. Landing 64px short of the hero's bottom on a phone
+         put the hero's last 6px in the 58..64 strip the header does not
+         reach, and 6px of the melon's deep red sat under the header on
+         every settle — reading as the landing page bleeding into the
+         page below it, at the one resting position this hook drives you
+         to.
+
+         Measuring also means an open menu is handled for free: the
+         header is genuinely taller then, and the thing that has to cover
+         the hero is whatever the header currently is. Ceil so a
+         fractional layout can't leave a hairline of it showing. */
+      const headerEl = document.querySelector("header");
+      const headerH = headerEl ? Math.ceil(headerEl.getBoundingClientRect().height) : 64;
+      const contentTop = Math.min(heroBottom - headerH, maxScroll);
       const y = window.scrollY;
       if (y <= 0 || y >= contentTop) return; // resolved already, or genuinely in the content — leave it alone
-      window.scrollTo({ top: y <= HERO_CAPTURE_PX ? 0 : contentTop, behavior: "smooth" });
+      if (y <= HERO_CAPTURE_PX) {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } else if (y >= contentTop * FINISH_FRACTION) {
+        window.scrollTo({ top: contentTop, behavior: "smooth" });
+      }
+      // Otherwise: mid-gap, and deliberately left where it is.
     };
 
     // 'scrollend' (Chrome 114+, Firefox 109+) fires exactly when the
@@ -155,7 +205,7 @@ export function useHeroSnap() {
       window.removeEventListener("scroll", onScroll);
       clearTimeout(timer);
     };
-  }, []);
+  }, [contentId]);
 }
 
 /**
@@ -247,7 +297,7 @@ export function useOptimize() {
             price: it.price,
             size: null,
             size_unit: null,
-            product_image: null,
+            product_image: it.product_image ?? null,
           });
           rows.sort((a, b) => a.price - b.price);
         }
@@ -265,7 +315,13 @@ export function useOptimize() {
       const plan =
         byStore.get(row.merchant_id) ??
         ({ merchant_id: row.merchant_id, merchant_name: row.merchant_name, subtotal: 0, items: [] } as StorePlan);
-      plan.items.push({ query, item_id: row.item_id, name: row.name, price: row.price });
+      plan.items.push({
+        query,
+        item_id: row.item_id,
+        name: row.name,
+        price: row.price,
+        product_image: row.product_image,
+      });
       plan.subtotal = Math.round((plan.subtotal + row.price) * 100) / 100;
       byStore.set(row.merchant_id, plan);
     }
@@ -285,9 +341,55 @@ export function useOptimize() {
   return {
     result, loading, error, build, retry, picks, setPick, plans, totalCost, swappable,
     // The queries the currently-shown result was actually built from —
-    // exposed so "Save as draft" records exactly what was submitted,
+    // exposed so the planner records exactly what was submitted,
     // decoupled from whatever the cart happens to hold by the time the
     // user clicks Save.
     lastQueries: lastArgs.current?.queries ?? [],
   };
+}
+
+/**
+ * Modal-dialog plumbing shared by the cart drawer and the trip picker:
+ * while `open`, focus moves into `panelRef`, Tab is trapped inside it,
+ * Esc calls `onClose`, and body scroll is locked; on close, focus goes
+ * back to whatever opened it.
+ */
+export function useDialogFocus(
+  panelRef: RefObject<HTMLElement | null>,
+  open: boolean,
+  onClose: () => void,
+) {
+  useEffect(() => {
+    if (!open) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    panelRef.current?.focus();
+    document.body.style.overflow = "hidden";
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !panelRef.current) return;
+      const focusables = panelRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input, [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+      previouslyFocused?.focus();
+    };
+  }, [open, onClose, panelRef]);
 }

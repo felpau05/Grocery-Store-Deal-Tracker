@@ -5,11 +5,34 @@ import { NOISE_GLSL, fbmGLSL, readHexVar } from "@/lib/liquidNoise";
 import { compileFullscreenProgram, createManagedCanvas, startCappedLoop } from "@/lib/liquidRunner";
 
 /**
- * Full-bleed intro splash for the trip planner: a slow liquid watermelon
- * gradient behind one giant wordmark, which the visitor scrolls past in
- * their own time (via the cue at the bottom, or just scrolling).
+ * ── THE TRIP-INTRO FOG SWITCH ────────────────────────────────────────
  *
- * The gradient is a WebGL fragment shader rather than CSS keyframes —
+ * `true`  → the animated WebGL shader below drifts behind the wordmark,
+ *           as it originally did. This is the current, requested state:
+ *           the fog was explicitly asked back onto the deals page and
+ *           this one.
+ * `false` → the static CSS gradient on the <section> is the whole
+ *           background.
+ *
+ * This is NOT the "fog on a card" the design brief bans — a full-bleed
+ * hero that the page scrolls out from under is the one other place the
+ * shader is allowed, alongside the page background (PageLiquid) and the
+ * header (HeaderLiquid). Never a card, panel or badge.
+ *
+ * Flipping this one value is the entire change — the shader source, the
+ * colour stops and the WebGL scaffolding below are all untouched.
+ */
+const TRIP_INTRO_FOG = true;
+
+/**
+ * Full-bleed intro splash for the trip planner: a watermelon gradient
+ * behind one giant wordmark, which the visitor scrolls past in their own
+ * time (via the cue at the bottom, or just scrolling) — or skips
+ * entirely, when they arrive from the cart drawer's "Plan my trip →"
+ * (see list/page.tsx's auto-build).
+ *
+ * With TRIP_INTRO_FOG on, the gradient is a WebGL fragment shader
+ * rather than CSS keyframes —
  * the flowing, marbled look comes from domain-warped fbm noise, which
  * has no CSS equivalent (layered radial-gradients drift, they don't
  * fold into each other). It's ~90 lines of raw WebGL with no library,
@@ -150,12 +173,22 @@ void main() {
 }
 `;
 
-export default function TripIntro({ targetId }: { targetId: string }) {
+/**
+ * `compact`: the short banner /list actually uses now — a strip, not a
+ * screen, so the New trip / My trips choice under it is visible the
+ * moment the page loads. No scroll cue (there's nothing to scroll past).
+ * The full-height form, with `targetId` for its cue, is kept as it was.
+ */
+export default function TripIntro({ targetId, compact = false }: { targetId?: string; compact?: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sectionRef = useRef<HTMLElement>(null);
 
   /* ── The gradient ────────────────────────────────────────────── */
   useEffect(() => {
+    // Fog off: never boot a WebGL context, never start a loop, never
+    // attach the pointermove listener. The <section>'s own static
+    // linear-gradient is the background on its own.
+    if (!TRIP_INTRO_FOG) return;
     const container = containerRef.current;
     if (!container) return;
 
@@ -314,39 +347,75 @@ export default function TripIntro({ targetId }: { targetId: string }) {
       // (see HERO_ROUTES there), so it floats over the gradient instead
       // of occupying flow and stealing 4rem off the top.
       //
-      // calc(var(--vh,1vh)*100), not h-screen/h-dvh: see the matching
+      // calc(var(--vh,1vh)*N), not h-screen/h-dvh: see the matching
       // comment on MelonHero — 100vh overshoots the real visible
       // viewport on mobile, and native dvh overcorrects by resizing
-      // this WebGL gradient mid-scroll as Safari's chrome animates,
-      // which reads as the scene zooming. --vh only updates on a real
+      // this gradient mid-scroll as Safari's chrome animates, which
+      // reads as the scene zooming. --vh only updates on a real
       // resize/rotation.
-      className="relative h-[calc(var(--vh,1vh)*100)] min-h-[440px] overflow-hidden border-b-2 border-ink
-                 bg-[linear-gradient(135deg,var(--color-trip-pink)_0%,var(--color-trip-orange)_35%,var(--color-trip-lime)_70%,var(--color-trip-green)_100%)]"
+      //
+      // Under a viewport, and well under it on a phone — the same
+      // numbers MelonHero uses, for the same reason. A full screen of
+      // wordmark sat between "Plan a trip" and the actual planner, with
+      // nothing on it to act on; leaving the top of #plan showing under
+      // the fold is what tells you the tool is down there. useHeroSnap
+      // MEASURES #plan rather than assuming one viewport, so these are
+      // free to change.
+      className={`relative overflow-hidden ${
+        compact
+          ? "h-[200px] sm:h-[240px]"
+          : "h-[calc(var(--vh,1vh)*62)] min-h-[360px] sm:h-[calc(var(--vh,1vh)*72)] sm:min-h-[440px]"
+      }
+                 bg-[linear-gradient(135deg,var(--color-trip-pink)_0%,var(--color-trip-orange)_35%,var(--color-trip-lime)_70%,var(--color-trip-green)_100%)]`}
     >
       <div ref={containerRef} className="absolute inset-0 w-full h-full" />
 
-      <div className="relative z-10 h-full flex flex-col items-center justify-center px-6 text-center">
+      {/* pt-16 in compact: the fixed header floats over the top 4rem of
+          this strip, so the wordmark centres in what's left below it. */}
+      <div className={`relative z-10 h-full flex flex-col items-center justify-center px-6 text-center ${compact ? "pt-16 pb-8" : ""}`}>
         <h1
-          className="font-display text-white leading-[0.85] tracking-[-0.02em]
-                     text-[clamp(2.75rem,13vw,11rem)] drop-shadow-[0_2px_24px_rgba(0,0,0,0.18)]"
+          className={`font-hero text-white leading-[0.85] tracking-[-0.02em] drop-shadow-[0_2px_24px_rgba(0,0,0,0.18)] ${
+            compact ? "text-[clamp(2.25rem,8vw,4.75rem)]" : "text-[clamp(2.75rem,13vw,11rem)]"
+          }`}
         >
-          PLAN A TRIP
+          Plan a trip
         </h1>
       </div>
 
+      {/* The seam. The hero's stops are a hot pink/red/orange/green mix
+          and the page below is pale sage — butted straight against each
+          other that edge read as two screenshots taped together. A short
+          fade into the page's own background token lands the transition
+          instead: the gradient stays as loud as it likes through the
+          wordmark and gives out just before the content starts. It sits
+          under the scroll cue (z-[5] vs z-10) and takes no pointer
+          events, so it changes nothing but the picture. */}
+      <div
+        aria-hidden
+        className="absolute inset-x-0 bottom-0 h-[26%] z-[5] pointer-events-none"
+        style={{
+          /* Opaque by 84%, not at the very edge: the scroll cue sits in
+             the last few percent, and a cue reading half-on-the-shader
+             is exactly the muddy contrast this fade exists to avoid. */
+          backgroundImage:
+            "linear-gradient(to bottom, color-mix(in srgb, var(--color-bg-via) 0%, transparent) 0%, color-mix(in srgb, var(--color-bg-via) 60%, transparent) 50%, var(--color-bg-via) 84%, var(--color-bg-via) 100%)",
+        }}
+      />
+
+      {!compact && targetId && (
       <a
         href={`#${targetId}`}
         aria-label="Skip to the trip planner"
         className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2
-                   font-mono font-bold text-[10px] uppercase tracking-[0.18em] text-white/85
-                   hover:text-white transition-colors"
+                   text-[13px] font-semibold text-ink-soft hover:text-ink transition-colors"
       >
         Start planning
         <span
           aria-hidden
-          className="scroll-cue scroll-cue-light relative block w-[22px] h-[34px] rounded-xl border-2 border-white/60"
+          className="scroll-cue relative block w-[22px] h-[34px] rounded-pill border border-ink/30"
         />
       </a>
+      )}
     </section>
   );
 }

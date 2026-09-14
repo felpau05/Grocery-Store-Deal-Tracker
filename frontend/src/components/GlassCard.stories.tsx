@@ -76,10 +76,12 @@ export const CustomSurface: Story = {
 };
 
 /** A standalone primary-CTA button — Save my stores, Build my trip, Try
- *  again — wraps in `as="button"` with a `.glow-btn` surface instead of
- *  the old flat `.btn-brut` offset shadow. The ring behind it is the
- *  same `<LiquidGlow />` every deal card wears, not a shadow the button
- *  paints itself. */
+ *  again — wraps in `as="button"` with a `.glow-btn` surface rather than
+ *  a `.btn-brut` shadow of its own. The slab behind it belongs to the
+ *  GlassCard wrapper (`.deal-card-glow`), the same one every deal card
+ *  wears, and it retracts as the button presses. (It was an animated
+ *  `<LiquidGlow />` ring until the fog was pulled back to the page
+ *  background and header only.) */
 export const StandaloneButton: Story = {
   args: {
     as: "button",

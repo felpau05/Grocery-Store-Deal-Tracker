@@ -1,7 +1,7 @@
 import type { Preview } from '@storybook/nextjs-vite'
 import React from 'react'
 import '../src/app/globals.css'
-import { CartProvider } from '@/lib/cart'
+import { TripsProvider } from '@/lib/trips'
 import { ToastProvider } from '@/lib/toast'
 import { AccountProvider } from '@/lib/account'
 
@@ -32,9 +32,9 @@ const preview: Preview = {
     (Story) => (
       <ToastProvider>
         <AccountProvider>
-          <CartProvider>
+          <TripsProvider>
             <Story />
-          </CartProvider>
+          </TripsProvider>
         </AccountProvider>
       </ToastProvider>
     ),

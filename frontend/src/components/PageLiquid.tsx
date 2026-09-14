@@ -124,6 +124,9 @@ export default function PageLiquid() {
     const container = containerRef.current;
     if (!container) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    // Switched off in globals.css — don't run a full-viewport shader
+    // loop that draws nothing.
+    if (readNumberVar("--rind-stripe-opacity", 0.55) <= 0) return;
 
     // Appended into containerRef (an otherwise-empty div React itself
     // rendered), not straight onto document.body: body's children ARE

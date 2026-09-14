@@ -826,6 +826,69 @@
   renderer.setSize(wrapEl.clientWidth, wrapEl.clientHeight);
   wrapEl.appendChild(renderer.domElement);
 
+  /* ── Framing: fit the melon to the SHAPE of the viewport ───────────
+     A PerspectiveCamera's `fov` is the VERTICAL angle, so the visible
+     world is `fov` tall and `fov * aspect` wide. Updating only
+     `camera.aspect` on resize — which is all this used to do — means a
+     portrait viewport keeps the full height and loses width, and the
+     melon simply grows past both edges: on a 390x844 phone it was
+     cropped to a wall of rind with the slice beside it cut in half.
+     Nothing was wrong with the scene; it was framed for a landscape
+     window and never re-framed for any other shape.
+
+     So frame off whichever dimension is actually binding, and hold
+     constant the thing that actually matters — how much of the frame
+     the fruit takes — rather than the camera distance.
+
+     FRAME_HALF is that single number: the half-extent, in world units
+     at unit distance, that the framing should always show. It is not a
+     free parameter, it is the hand-tuned landscape framing read back
+     out — 7.2 * tan(38deg/2) — which is why a landscape window lands on
+     7.2 again to well under a pixel and is left exactly where it was.
+
+     One constant on purpose. This was briefly written as a framing
+     radius over a fill fraction, which reads like two knobs but is not:
+     pinning landscape to 7.2 fixes their ratio, so moving one and
+     re-solving the other changes nothing anywhere. Raising THIS number
+     pushes the camera back on every viewport together, landscape
+     included, which is the only honest way to say "show more room
+     around the melon".
+
+     It sits comfortably above the melon's own radius (R = 1.5) because
+     a sliced melon's wedges spring apart, and framing to the intact
+     sphere would let them swing out of shot on precisely the screen
+     shape with no margin to give. */
+  const FRAME_HALF = 7.2 * Math.tan(38 * Math.PI / 180 / 2);
+
+  function fitDistance() {
+    const vFov = camera.fov * Math.PI / 180;
+    const hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect);
+    // The narrower of the two angles is the one that clips the object,
+    // and on a landscape window that is always the vertical — which is
+    // why everything wider than square is left alone.
+    const binding = Math.min(vFov, hFov);
+    return FRAME_HALF / Math.tan(binding / 2);
+  }
+
+  /* Re-frame for the current viewport, carrying the visitor's own zoom
+     across as a RATIO rather than resetting it. Someone who has zoomed
+     in to look at the pips keeps that relationship when they rotate the
+     phone; the zoom buttons stay plain +/- 1.1 in world units and never
+     need to know any of this. */
+  function refit() {
+    const w = wrapEl.clientWidth, h = wrapEl.clientHeight;
+    if (!w || !h) return;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+
+    const next = fitDistance();
+    const ratio = next / fitDist;
+    fitDist = next;
+    camDist = Math.min(MAX_DIST, Math.max(MIN_DIST, camDist * ratio));
+    targetDist = Math.min(MAX_DIST, Math.max(MIN_DIST, targetDist * ratio));
+  }
+
   scene.add(new THREE.AmbientLight(0xffffff, 0.6));
   const keyLight = new THREE.DirectionalLight(0xffffff, 1.05);
   keyLight.position.set(3, 4, 5);
@@ -1068,6 +1131,16 @@
   const introDirs = [];
   for (let i = 0; i < WEDGES; i++) introDirs.push(midDir(i, 1));
 
+  /* ── Rest pose: pre-split, not whole ───────────────────────────────
+     `true` → the melon knits together (the intro above, unchanged) and
+              then immediately cracks itself into two halves, spread and
+              tipped onto a diagonal — that's the resting pose visitors
+              land on, not a closed sphere.
+     `false` → the intro ends on the whole melon, as it always did.
+     One flag, nothing else — see settleSplitRest() below. */
+  const REST_SPLIT = true;
+  const REST_TILT = 0.5; // world-Z roll (rad) applied once, see below
+
   function endIntro() {
     introDone = true;
     for (let i = 0; i < WEDGES; i++) wedgeGroups[i].rotation.y = 0;
@@ -1077,6 +1150,44 @@
     if (clusters.length === 1) {
       for (let i = 0; i < WEDGES; i++) wedgeGroups[i].position.copy(clusters[0].cNeg);
     }
+    if (REST_SPLIT) settleSplitRest();
+  }
+
+  /* The moment the intro finishes knitting the melon whole, immediately
+     crack it into its resting pose instead: split in half, spread
+     further apart than a plain slice leaves them, tipped onto a
+     diagonal. Built entirely out of the toy's own existing moves —
+     splitCluster() is the same cut a visitor's click makes, adjustSpread
+     is the same "spread pieces apart" button — so nothing about
+     slicing, colliders or physics needs a special case for "this is the
+     starting pose"; every one of those systems just sees a melon that
+     got sliced and spread a moment after it finished assembling, and
+     eases into the new targetPos the same way it always does.
+
+     The one thing that DOES need telling apart is the auto-healer: left
+     alone, it exists specifically to close a cut back up after a few
+     calm seconds (see HEAL_DELAY below), which would silently undo this
+     the first time the visitor just sat and watched. Parking `lastTouch`
+     at +Infinity makes that "seconds since you last touched it" gate
+     permanently fail without touching the healer itself — the instant
+     the visitor actually drags, slices or spreads something for real,
+     that same code path's noteTouch() overwrites it with a real
+     timestamp and healing behaves exactly as it always has. */
+  function settleSplitRest() {
+    if (clusters.length !== 1) return; // already split some other way — leave it
+    splitCluster(clusters[0]);
+    // Just one extra step past the plain slice gap — two was too wide
+    // for a phone's narrower field of view and pushed a half off the
+    // edge of the canvas entirely.
+    adjustSpread(1);
+    // A roll around the camera's own view axis — applyTumble only ever
+    // turns the melon about world X/Y, so this is spelled out here
+    // instead. It's what turns the halves' plain left-right split into
+    // the "resting tipped on its side" look; the idle spin above keeps
+    // turning the whole tilted arrangement afterward exactly as before.
+    tmpQ.setFromAxisAngle(WORLD_Z, REST_TILT);
+    melonGroup.quaternion.premultiply(tmpQ);
+    lastTouch = Infinity;
   }
 
   function stepIntro(dt) {
@@ -1467,6 +1578,7 @@
   const tmpV3 = new THREE.Vector3();
   const WORLD_X = new THREE.Vector3(1, 0, 0);
   const WORLD_Y = new THREE.Vector3(0, 1, 0);
+  const WORLD_Z = new THREE.Vector3(0, 0, 1); // only settleSplitRest()'s one-off tilt uses this
   const tumbleVel = new THREE.Vector2();
   let spinSpeed = 0.16;  // hero idle
   let rotationPaused = false;
@@ -1602,7 +1714,15 @@
 
   let camDist = 7.2;
   let targetDist = 7.2;
+  /* The distance the CURRENT viewport shape wants. Seeded with the
+     hand-tuned landscape value so the first refit() below scales from a
+     known state rather than from zero. */
+  let fitDist = 7.2;
   const MIN_DIST = 3.6, MAX_DIST = 30;
+
+  // Frame for the viewport we actually booted into, which is very often
+  // not the 16:9 the numbers above were tuned against.
+  refit();
 
   document.getElementById('zoom-in').addEventListener('click', () => {
     targetDist = Math.max(MIN_DIST, targetDist - 1.1);
@@ -1968,11 +2088,7 @@
   }
   boot();
 
-  window.addEventListener('resize', () => {
-    camera.aspect = wrapEl.clientWidth / wrapEl.clientHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(wrapEl.clientWidth, wrapEl.clientHeight);
-  });
+  window.addEventListener('resize', refit);
 })();
 </script>
 </body>

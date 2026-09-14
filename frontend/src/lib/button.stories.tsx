@@ -29,7 +29,7 @@ function ButtonSheet() {
         {/* Unlike the other three, this one is always wrapped in
             <GlassCard as="button">, not used as a bare button className —
             .glow-btn paints no shadow of its own, the wrapper's
-            LiquidGlow ring is the shadow. */}
+            .deal-card-glow offset slab is the shadow. */}
         <GlassCard as="button" surfaceClassName={BTN_PRIMARY_CTA}>Sign in</GlassCard>
       </div>
     </div>

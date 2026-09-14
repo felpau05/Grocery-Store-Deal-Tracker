@@ -12,30 +12,15 @@ const MERCHANTS: Merchant[] = [
 
 const MERCHANT_COUNTS = new Map([[1, 83], [2, 252], [3, 226], [4, 794]]);
 
-const CATEGORIES = ["produce", "dairy eggs", "beverages", "bakery", "household"];
-const CATEGORY_COUNTS = new Map([
-  ["produce", 198],
-  ["dairy eggs", 153],
-  ["beverages", 205],
-  ["bakery", 100],
-  ["household", 282],
-]);
-
 /**
  * Real `useState` for every piece of filter state, exactly like page.tsx
  * — checkboxes, sort toggles, and the price-range inputs are actually
  * interactive in the Storybook canvas, not static args. This is the
  * most useful way to verify the multi-select behavior (several stores
- * AND several categories checked at once) without spinning up the whole
- * deals page.
+ * checked at once) without spinning up the whole deals page.
  */
-function InteractiveSidebar({
-  signedIn = false,
-}: {
-  signedIn?: boolean;
-}) {
+function InteractiveSidebar({ signedIn = false }: { signedIn?: boolean }) {
   const [selectedMerchantIds, setSelectedMerchantIds] = useState<number[]>([]);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [sort, setSort] = useState<SortMode>("price");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [priceUnits, setPriceUnits] = useState<PriceUnit[]>([]);
@@ -64,10 +49,6 @@ function InteractiveSidebar({
         selectedMerchantIds={selectedMerchantIds}
         setSelectedMerchantIds={setSelectedMerchantIds}
         merchantCounts={MERCHANT_COUNTS}
-        categories={CATEGORIES}
-        selectedCategories={selectedCategories}
-        setSelectedCategories={setSelectedCategories}
-        categoryCounts={CATEGORY_COUNTS}
         sort={sort}
         setSort={setSort}
         sortDir={sortDir}
@@ -110,7 +91,7 @@ export const Anonymous: Story = {
   args: {},
 };
 
-/** Signed in — heading becomes "Alex's stores", edit-stores link appears. */
+/** Signed in — heading becomes "Your stores", edit-stores link appears. */
 export const SignedIn: Story = {
   args: { signedIn: true },
 };

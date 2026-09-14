@@ -2,22 +2,29 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAccount } from "@/lib/account";
 import { CHIP, CHIP_ACTIVE, CHIP_LOOK, CHIP_QUIET } from "@/lib/chip";
-import { useCart } from "@/lib/cart";
+import { useCart } from "@/lib/trips";
 import CartGlyph from "./CartGlyph";
 import HeaderLiquid from "./HeaderLiquid";
 
+/* "Deals" points at /deals, not "/". "/" is the action hub now — hero,
+   then four big choices — and the full browsable catalogue lives on its
+   own route so landing on the site no longer means landing in a
+   2,000-item grid. The melon logo to the left is the way back to "/". */
 const TABS = [
-  { href: "/", label: "Deals" },
-  { href: "/list", label: "Plan a trip" },
+  { href: "/deals", label: "Deals" },
+  { href: "/list", label: "Plan a shopping trip" },
 ];
 
-// Routes that open on a full-viewport hero the header floats over:
-// "/" (MelonHero) and "/list" (TripIntro). Both need the header out of
-// document flow so the hero can be a true h-screen.
-const HERO_ROUTES = ["/", "/list"];
+// Routes that open on a full-bleed hero the header floats over — just
+// "/" (MelonHero). It needs the header out of document flow so the hero
+// starts at the true top of the viewport rather than being pushed down
+// by 64px of header. /list was here while it had a banner; without one
+// the header has nothing to float over and goes back to `sticky`, in
+// flow, like every other route.
+const HERO_ROUTES = ["/"];
 
 // Below this scroll depth on a hero page, the header is transparent
 // (floating over the hero, logo/nav still fully visible and clickable);
@@ -45,8 +52,8 @@ export default function SiteHeader() {
   }, [hasHero]);
 
   // `fixed` only on hero pages: the header has to float OVER the hero
-  // without occupying document flow, so MelonHero/TripIntro can be a
-  // true 100vh. Every other page keeps the original `sticky` —
+  // without occupying document flow, so MelonHero can begin
+  // at y=0. Every other page keeps the original `sticky` —
   // unaffected by any of this. Content (logo, nav, cart) stays visible
   // and clickable either way; only the background/border/blur toggle.
   const transparent = hasHero && atHeroTop;
@@ -64,11 +71,153 @@ export default function SiteHeader() {
   // own postal code (or nothing, if they haven't set one yet), never
   // meta.default_postal_code. Only a true anonymous visitor sees the
   // example chip.
+  // (`isExample` used to live here as `!user`; the markup below now
+  // branches on `user` itself, since signed-in and signed-out are two
+  // different arrangements rather than one with a flag.)
   const hasStores = !!user && user.merchants.length > 0;
-  const isExample = !user;
   const activePostal = user
     ? user.postal_code ?? (hasStores ? `${user.merchants.length} stores` : null)
     : meta?.default_postal_code ?? null;
+
+  /* ── When to collapse: measured, not guessed ──────────────────────
+     This was a `md:` breakpoint, and a breakpoint is the wrong tool for
+     it. What decides whether the chips fit is their own width, and that
+     changes with the content: an account name is 3 characters or 30, the
+     postal chip is "EXAMPLE DATA (K2J4G8)" signed out and "K2J4G8"
+     signed in, and the "Scraping…" chip appears and vanishes on its own.
+     At 830px — comfortably past `md` — "PLAN A TRIP" was wrapping onto
+     two lines and the chips were crowding the wordmark, because 768 was
+     a number picked for one particular set of labels.
+
+     So measure. Two thresholds, in the order they bite:
+
+       1. The chips don't fit beside the wordmark → collapse to the
+          hamburger.
+       2. Even the hamburger doesn't fit beside the wordmark → drop the
+          wordmark and keep the melon, which is still a clear tappable
+          "home". Narrower than that there is nothing left to give, and
+          it degrades the way it always did.
+
+     `fit === null` means "needs measuring": the effect below renders the
+     row off-layout (absolute + invisible, so it still has a width),
+     reads what everything actually needs, and commits a decision. It
+     runs in useLayoutEffect, so it resolves before paint and no one ever
+     sees the measuring pass. */
+  const barRef = useRef<HTMLDivElement>(null);
+  const logoRef = useRef<HTMLAnchorElement>(null);
+  const markRef = useRef<HTMLSpanElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const handleRef = useRef<HTMLButtonElement>(null);
+  const cartRef = useRef<HTMLButtonElement>(null);
+
+  const [fit, setFit] = useState<{ row: boolean; wordmark: boolean } | null>(null);
+
+  // Anything that changes how wide the chips want to be invalidates the
+  // measurement. Re-measuring is one off-layout pass, so it is cheap to
+  // be liberal here — a stale `fit` is a wrapped header.
+  const fitSignature = `${user?.name ?? ""}|${activePostal ?? ""}|${scrapeStatus?.running ?? false}|${pathname}`;
+  useLayoutEffect(() => setFit(null), [fitSignature]);
+
+  useLayoutEffect(() => {
+    if (fit !== null) return;
+    const bar = barRef.current;
+    const logo = logoRef.current;
+    const mark = markRef.current;
+    const menu = menuRef.current;
+    const cart = cartRef.current;
+    const handle = handleRef.current;
+    if (!bar || !logo || !menu || !cart || !handle) return;
+
+    // The bar's own side padding lives on the logo and the cart, so the
+    // only slack unaccounted for is the flex gaps between the three or
+    // four children — one `gap-x-3` each, plus a little air so the chips
+    // never end up literally touching the wordmark.
+    const SLACK = 28;
+    const avail = bar.clientWidth;
+    const logoW = logo.scrollWidth;
+    const markW = mark?.scrollWidth ?? 0;
+    const cartW = cart.scrollWidth;
+
+    setFit({
+      row: logoW + menu.scrollWidth + cartW + SLACK <= avail,
+      wordmark:
+        logoW + menu.scrollWidth + cartW + SLACK <= avail ||
+        logoW + handle.scrollWidth + cartW + SLACK <= avail ||
+        // Nothing left to drop but the name itself.
+        markW === 0,
+    });
+  }, [fit]);
+
+  /* Re-measure when the bar's WIDTH changes — and only its width.
+     Observing size outright is an infinite loop: committing a decision
+     changes the header's HEIGHT (a row bar is h-16, a collapsed one
+     h-14, and the measuring pass takes the menu out of flow entirely),
+     the observer sees a resize, invalidates, re-measures, and commits
+     the same height change again forever. Width is the only input the
+     decision actually reads, so it is the only change worth acting on. */
+  /* Publish the header's real height as --header-h.
+
+     Anything that has to sit exactly below a sticky header needs this
+     number, and hardcoding it has already caused one bug (useHeroSnap
+     assumed 64 when the bar is 58 on a phone, leaving 6px of the hero
+     showing under it). It is h-14 sm:h-16 plus a 2px border, and taller
+     again while the menu panel is open, so the only reliable source is
+     the element. /deals reads it to size its own scroll area. */
+  const headerRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const publish = () =>
+      document.documentElement.style.setProperty(
+        "--header-h",
+        `${Math.ceil(el.getBoundingClientRect().height)}px`,
+      );
+    publish();
+    const ro = new ResizeObserver(publish);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const lastWidth = useRef(-1);
+  useEffect(() => {
+    const bar = barRef.current;
+    if (!bar) return;
+    const ro = new ResizeObserver(() => {
+      const w = bar.clientWidth;
+      if (w === lastWidth.current) return;
+      lastWidth.current = w;
+      setFit(null);
+    });
+    ro.observe(bar);
+    return () => ro.disconnect();
+  }, []);
+
+  const measuring = fit === null;
+  // Default to the collapsed arrangement for the server render and the
+  // first paint: a hamburger that widens into a row is a smaller visual
+  // correction than a row that collapses, and it can never be the one
+  // that overflows.
+  const asRow = fit?.row ?? false;
+  const showWordmark = fit?.wordmark ?? true;
+
+  // The narrow-screen menu. Everything that used to ride in a
+  // horizontally-scrolling strip lives behind this instead.
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Navigating closes it — otherwise tapping "Deals" leaves the panel
+  // hanging open over the page you just asked for.
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
 
   // Pulse the badge when the count goes up (something was added).
   const [pulse, setPulse] = useState(false);
@@ -85,6 +234,7 @@ export default function SiteHeader() {
 
   return (
     <header
+      ref={headerRef}
       className={`${hasHero ? "fixed" : "sticky"} top-0 left-0 right-0 z-20 overflow-hidden transition-all duration-300 ${
         transparent
           ? "bg-transparent border-b-2 border-transparent"
@@ -99,23 +249,37 @@ export default function SiteHeader() {
       {/* Full-bleed: logo and cart sit at the true edges of the viewport,
           same as the deals page's own grid below it.
 
-          Below `sm`, the logo and the cart are the only two things
-          pinned in place — home and "the thing you came here to check"
-          shouldn't ever require a scroll to reach. Everything between
-          them (nav, status, postal, sign-in) rides in a `.scroll-peek-x`
-          strip instead: it's deliberately NOT shrunk or wrapped to fit,
-          so on a narrow screen it scrolls, and whichever chip lands at
-          the edge fades under the mask rather than getting hard-clipped
-          — the "there's more, drag me" cue, instead of the row folding
-          onto a second line. From `sm` up the strip already fits inside
-          one row on its own, so the class reverts to a plain row and
-          none of this is visible. */}
-      <div className="relative z-10 w-full h-14 sm:h-16 flex items-center gap-2 sm:gap-3">
-        <Link href="/" className="group flex items-center gap-2 pl-4 sm:pl-6 shrink-0" title="GroceryDeals — home">
-          {/* Below `sm` the wordmark is dropped entirely, not just
-              shrunk — every extra px pinned in this bookend is a px the
-              scroll-peek strip doesn't get, and the melon alone is
-              already a clear, tappable "home" mark at this size. */}
+          Below `md`, the logo, the hamburger and the cart are the only
+          things on the bar — home and "the thing you came here to
+          check" shouldn't ever require a tap to reach. Everything
+          between them (nav, status, postal, sign-in) moves into the
+          menu panel, which is the SAME ELEMENT re-flowed rather than a
+          second copy of the markup: `flex-wrap` plus `w-full` on that
+          container drops it onto its own line under the bar, and
+          `md:w-auto md:flex-1` puts it back in the row. One set of
+          chips, one set of states, two arrangements.
+
+          This replaces a `.scroll-peek-x` strip that let the chips
+          scroll sideways under a fade. It worked, but it hid live
+          state — a running scrape or "no postal code" could be parked
+          off-screen with only a fade hinting at it — and a horizontal
+          drag inside a fixed header is an awkward gesture next to a
+          vertically scrolling page. A menu says how many things there
+          are and shows all of them at once.
+
+          The panel expands the header rather than floating beneath it,
+          which is why none of this needs to escape the `overflow-hidden`
+          that clips HeaderLiquid — and the rind simply grows to fill
+          the taller header behind it. */}
+      <div ref={barRef} className="relative z-10 w-full flex flex-wrap items-center gap-x-2 sm:gap-x-3">
+        <Link ref={logoRef} href="/" className="group flex items-center gap-2 pl-4 sm:pl-6 shrink-0 h-14 sm:h-16" title="GroceryDeals — home">
+          {/* The wordmark used to vanish at a fixed `sm`, to buy width
+              for the old scrolling chip strip. It now stays until it
+              genuinely cannot fit — see the measuring pass above — so on
+              most phones the site gets to say its name, and it is only
+              given up when the hamburger and cart would otherwise be
+              pushed into it. Kept mounted while measuring so there is
+              something to measure. */}
           <span aria-hidden className="text-2xl leading-none group-hover:-rotate-12 transition-transform">
             🍉
           </span>
@@ -129,23 +293,50 @@ export default function SiteHeader() {
               bracket syntax reads the variable directly and always
               updates immediately — same reason shadow-[...] classes
               elsewhere in this app never have that problem. */}
-          <span className="hidden sm:inline text-[22px] leading-none font-bold text-[var(--color-logo-text)] [font-family:var(--font-serif)]">
+          <span
+            ref={markRef}
+            className={`text-[17px] sm:text-[22px] leading-none font-bold text-[var(--color-logo-text)] [font-family:var(--font-serif)] whitespace-nowrap ${
+              showWordmark || measuring ? "" : "hidden"
+            }`}
+          >
             GroceryDeals
           </span>
         </Link>
 
-        <div className="scroll-peek-x flex-1 min-w-0 h-full">
-          {/* w-max: lets this row size to its actual content instead of
-              being squeezed to fit the strip — that's what makes it
-              genuinely overflow (and thus scroll/peek) on mobile rather
-              than every chip just shrinking. sm:w-full + sm:justify-end
-              restores the original "hugs the right edge" desktop
-              layout once the strip stops scrolling. */}
-          <div className="flex items-center gap-1.5 sm:gap-2 h-full w-max pr-8 sm:w-full sm:justify-end sm:pr-0">
+        {/* One element, three states.
+
+            ROW — it sits in the bar and `flex-1` pushes the cart to the
+            right edge. PANEL — `order-last w-full` drops it onto its own
+            line under the bar, stacked, and it expands the header rather
+            than floating over the page (which is why none of this has to
+            escape the `overflow-hidden` that clips HeaderLiquid).
+            MEASURING — laid out as a row but `absolute invisible`, so it
+            still reports a natural width while taking up no space and
+            showing nothing. `inert` keeps it out of the tab order for
+            the sub-frame it exists in that state. */}
+        <div
+          ref={menuRef}
+          id="site-menu"
+          inert={measuring || undefined}
+          onClick={() => setMenuOpen(false)}
+          className={
+            measuring
+              ? "absolute invisible pointer-events-none whitespace-nowrap flex items-center gap-1.5 sm:gap-2"
+              : asRow
+              ? "order-none w-auto flex-1 h-16 min-w-0 justify-end flex items-center gap-1.5 sm:gap-2"
+              : `order-last w-full min-w-0 flex-col items-start gap-2 px-4 pb-4 pt-3 border-t border-paper/20 ${
+                  menuOpen ? "flex" : "hidden"
+                }`
+          }
+        >
             <nav className="flex items-center gap-1.5 sm:gap-2">
               {TABS.map((tab) => {
-                const active =
-                  tab.href === "/" ? pathname === "/" : pathname.startsWith(tab.href);
+                /* Every tab href is a real path segment now, so the
+                   old `tab.href === "/" ? pathname === "/"` special case
+                   is gone — it existed only because "/" is a prefix of
+                   every route and startsWith would have lit the Deals
+                   tab up on every page. */
+                const active = pathname.startsWith(tab.href);
                 return (
                   <Link
                     key={tab.href}
@@ -159,8 +350,11 @@ export default function SiteHeader() {
             </nav>
 
             {/* Divider between navigation and everything account-related
-                (status, location, sign-in). */}
-            <span aria-hidden className={`w-px h-6 shrink-0 ${divider}`} />
+                (status, location, sign-in). Vertical between two groups
+                in a row; horizontal between two groups in the stacked
+                panel, where a 1px column 24px tall would read as a
+                rendering artefact. */}
+            <span aria-hidden className={`shrink-0 w-px h-6 max-md:w-full max-md:h-px ${divider}`} />
 
             {/* Scraping indicator — visible on every page while an
                 on-demand scrape runs for the signed-in user's area. */}
@@ -175,55 +369,105 @@ export default function SiteHeader() {
               </Link>
             )}
 
-            {/* Always-visible postal code — so it's never ambiguous which
-                area's deals are on screen. Yellow + "example" only for a
-                true anonymous visitor; a signed-in account with no postal
-                code yet gets a prompt instead, never the example area. */}
-            {activePostal ? (
+            {/* Signed in, this is ONE control: the two chips it replaces
+                both pointed at /settings, so they were two rims and two
+                tap targets for one destination. It reads as one fact —
+                who you are, then where you're shopping.
+
+                Signed OUT they stay two, and deliberately. "Sign in" is
+                the call to action and the example-data notice is a
+                statement about the data on screen; folding a CTA into a
+                status readout makes the button the smaller half of
+                something you're meant to click. They also no longer
+                share a destination once signed out — one is the way in,
+                the other explains what you're looking at until you take
+                it. */}
+            {user ? (
               <Link
-                href={user ? "/settings" : "/login"}
-                title={
-                  isExample
-                    ? "Showing example-area deals — sign in to set your own postal code"
-                    : "Your stores drive these deals — click to change them"
-                }
-                className={`${CHIP} flex items-center gap-1.5 shrink-0 ${chipQuiet}`}
+                href="/settings"
+                className={`${CHIP} flex items-center gap-1.5 shrink-0 ${
+                  pathname.startsWith("/settings") ? chipActive : chipQuiet
+                }`}
+                title={`${user.name} · ${user.postal_code ?? "no postal code"} — change your area and stores`}
               >
+                <span aria-hidden>⌂</span>
+                <span>{user.name}</span>
+                <span aria-hidden className="opacity-45 font-normal">|</span>
                 <span aria-hidden>📍</span>
-                {activePostal}
-                {isExample && (
-                  <span className="text-[9px] uppercase tracking-[0.08em] opacity-70">example</span>
-                )}
+                <span>{activePostal ?? "Set postal code"}</span>
               </Link>
             ) : (
-              user && (
+              <>
                 <Link
-                  href="/settings"
-                  title="Set your postal code to see deals near you"
-                  className={`${CHIP} flex items-center gap-1.5 shrink-0 ${chipQuiet}`}
+                  href="/login"
+                  className={`${CHIP} flex items-center gap-1.5 shrink-0 ${
+                    pathname.startsWith("/login") ? chipActive : chipQuiet
+                  }`}
+                  title="Sign in to set your stores"
                 >
-                  <span aria-hidden>📍</span>
-                  <span>Set postal code</span>
+                  <span aria-hidden>⌂</span>
+                  <span>Sign in</span>
                 </Link>
-              )
+                {activePostal && (
+                  <Link
+                    href="/login"
+                    title="Showing example-area deals — sign in to set your own postal code"
+                    className={`${CHIP} flex items-center gap-1.5 shrink-0 ${chipQuiet}`}
+                  >
+                    <span aria-hidden>📍</span>
+                    {/* The area is the parenthetical, not the headline:
+                        what matters to someone who hasn't signed in is
+                        that none of this is their data yet. It used to
+                        lead with the postal code and trail a small
+                        "example", which read as "here are your deals"
+                        with a footnote. */}
+                    <span className="uppercase tracking-[0.06em]">Example data</span>
+                    <span className="opacity-70">({activePostal})</span>
+                  </Link>
+                )}
+              </>
             )}
-
-            <Link
-              href={user ? "/settings" : "/login"}
-              className={`${CHIP} shrink-0 ${
-                pathname.startsWith(user ? "/settings" : "/login") ? chipActive : chipQuiet
-              }`}
-              title={user ? `${user.name} · ${user.postal_code ?? "no postal code"}` : "Sign in to set your stores"}
-            >
-              <span aria-hidden>⌂</span>
-              <span className={user ? "hidden sm:inline sm:ml-1" : "ml-1"}>
-                {user ? user.name : "Sign in"}
-              </span>
-            </Link>
-          </div>
         </div>
 
+        {/* The handle. `ml-auto` is what pins it and the cart to the
+            right edge while the menu is on its own line; in row mode it
+            is gone and the menu's own `flex-1` does that job. Rendered
+            (invisibly) during the measuring pass too, since one of the
+            two thresholds is "does the hamburger itself still fit". */}
         <button
+          ref={handleRef}
+          onClick={() => setMenuOpen((v) => !v)}
+          aria-expanded={menuOpen}
+          aria-controls="site-menu"
+          aria-label={menuOpen ? "Close menu" : "Open menu"}
+          className={`${CHIP_LOOK} ml-auto shrink-0 p-1.5 ${chipQuiet} ${
+            measuring ? "invisible" : asRow ? "hidden" : ""
+          }`}
+        >
+          {/* Three rules that become an X — drawn rather than typed so
+              it animates, and so it doesn't depend on a glyph the
+              system font may not have. */}
+          <span aria-hidden className="relative block w-5 h-5">
+            <span
+              className={`absolute left-0 block h-[2px] w-5 bg-current transition-all duration-200 ${
+                menuOpen ? "top-1/2 -translate-y-1/2 rotate-45" : "top-[5px]"
+              }`}
+            />
+            <span
+              className={`absolute left-0 top-1/2 -translate-y-1/2 block h-[2px] w-5 bg-current transition-opacity duration-200 ${
+                menuOpen ? "opacity-0" : "opacity-100"
+              }`}
+            />
+            <span
+              className={`absolute left-0 block h-[2px] w-5 bg-current transition-all duration-200 ${
+                menuOpen ? "top-1/2 -translate-y-1/2 -rotate-45" : "bottom-[5px]"
+              }`}
+            />
+          </span>
+        </button>
+
+        <button
+          ref={cartRef}
           onClick={openDrawer}
           aria-label={`Open grocery list, ${count} ${count === 1 ? "item" : "items"}`}
           /* CHIP_LOOK, not CHIP: CHIP already bakes in its own px/py,

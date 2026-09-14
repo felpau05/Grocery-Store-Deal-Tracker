@@ -1,27 +1,24 @@
 import Link from "next/link";
-import GlassCard from "@/components/GlassCard";
+import GlassCard, { GLASS_SURFACE_DENSE } from "@/components/GlassCard";
 
 /** Styled 404 — dead item links (expired deals get pruned) land here. */
 export default function NotFound() {
   return (
-    <main className="max-w-md mx-auto px-6 py-20 text-center">
-      <span className="stamp text-sale-dark text-lg">Sold out</span>
-      <h1 className="font-display text-3xl text-ink mt-6">
-        This deal is gone
-      </h1>
-      {/* No card behind this paragraph — same raw-gradient case as
-          error.tsx, so --color-ink, not --color-ink-soft. */}
-      <p className="text-ink mt-3">
-        It probably expired and got swept out with last week&apos;s flyer. The current
-        deals are still on the board.
-      </p>
-      <GlassCard
-        as={Link}
-        href="/"
-        wrapperClassName="inline-block mt-8"
-        surfaceClassName="glow-btn px-5 py-2.5 bg-sale text-paper font-display text-sm"
-      >
-        ← Back to this week&apos;s deals
+    <main className="max-w-md mx-auto px-6 py-20">
+      <GlassCard surfaceClassName={`${GLASS_SURFACE_DENSE} p-8 text-center`}>
+        <h1 className="font-display text-2xl text-ink">This deal is gone</h1>
+        <p className="text-[14px] text-ink-soft mt-2.5 leading-relaxed">
+          It probably expired and got swept out with last week&apos;s flyer. This week&apos;s deals
+          are still up.
+        </p>
+        <GlassCard
+          as={Link}
+          href="/deals"
+          wrapperClassName="inline-block mt-6"
+          surfaceClassName="glow-btn inline-block px-5 py-2.5 bg-accent text-white font-display text-sm hover:bg-accent-dark transition-colors"
+        >
+          Back to this week&apos;s deals
+        </GlassCard>
       </GlassCard>
     </main>
   );

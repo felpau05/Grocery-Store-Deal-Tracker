@@ -1,3 +1,5 @@
+import { FIELD_LABEL } from "@/lib/fieldLabel";
+
 type PriceTagProps = {
   price: number;
   priceUnit: "g" | "ml" | "each";
@@ -7,54 +9,64 @@ type PriceTagProps = {
 };
 
 /**
- * The signature element: a die-cut price-gun sticker. One rotated tag,
- * a punch hole, everything else on the page stays quiet around it.
- * A `~` prefix marks prices the parser wasn't confident about.
+ * The price, as plain typography.
+ *
+ * This used to be the app's self-declared "signature element": a -3deg
+ * die-cut price-gun sticker with an SVG notch, a punch-hole, faked
+ * outline-and-slab drop-shadows and a hover wobble. On a page rendering
+ * 24 of them at once it was the loudest object on screen, and it was
+ * shouting the one thing nobody needs shouted — a number you can read
+ * perfectly well flat.
+ *
+ * Two distinctions in here carry real meaning and survived the
+ * flattening, expressed quietly instead of as decoration:
+ *
+ *  · `perUnit` — price-per-unit comparison is this whole app's premise,
+ *    so it stays on the card face. It's just secondary now: small,
+ *    `ink-muted`, under the price rather than beside it. When there's no
+ *    size to divide by (`priceUnit === "each"`), the single number IS
+ *    both the total and the unit price, so the label says so — "Price /
+ *    Unit Price" — rather than splitting into an unlabeled second line.
+ *  · `highConfidence` — a `~` prefix marks a price the flyer parser
+ *    wasn't sure of. It's a muted tilde plus a softer ink for the whole
+ *    price (so an uncertain price reads as slightly provisional at a
+ *    glance) rather than its own badge.
+ *
+ * Mono stays, because these are NUMBERS — the one job the type rules
+ * still allow it. `tabular-nums` keeps decimal points aligned down a
+ * column of cards.
+ *
+ * `data-price-tag` must stay on the root element: the deals page's
+ * Konami-code easter egg queries it.
  */
 export default function PriceTag({ price, priceUnit, perUnit, perUnitLabel, highConfidence = true }: PriceTagProps) {
+  // Sold by weight/volume: a real second figure, its own line and label.
+  // Sold "each": there's no size to divide by, so the price above already
+  // IS the unit price — the top label says both jobs at once and there's
+  // no second line to render.
+  const priceLabel = perUnit === null && priceUnit === "each" ? "Price / Unit Price:" : "Price:";
+  const unitLine = perUnit !== null ? `$${perUnit.toFixed(2)}/${perUnitLabel}` : null;
+
   return (
     <div
       data-price-tag
       title={highConfidence ? undefined : "Price may be approximate"}
-      className="price-tag relative -rotate-3 select-none transition-transform duration-200 ease-out group-hover:-rotate-1 group-hover:scale-[1.03]"
-      style={{
-        // clip-path eats real borders/shadows, so the outline and the
-        // hard offset shadow are both faked with drop-shadows on the shape.
-        //
-        // The offset shadow (last term) was 3px/3px — reduced to 2px/2px
-        // as a light touch, not a redesign: this is the one hard-pop
-        // shadow-for-depth idiom left in the app now that cards get
-        // their depth from the LiquidGlow ring instead. The outline
-        // itself (the other four terms) is untouched — that's what
-        // makes the die-cut sticker actually read as die-cut, and it's
-        // the part of this "signature element" not up for reinterpreting.
-        filter:
-          "drop-shadow(2px 0 0 var(--color-price-tag-outline)) drop-shadow(-2px 0 0 var(--color-price-tag-outline)) drop-shadow(0 2px 0 var(--color-price-tag-outline)) drop-shadow(0 -2px 0 var(--color-price-tag-outline)) drop-shadow(2px 2px 0 var(--color-price-tag-outline))",
-      }}
+      className="select-none"
     >
       <div
-        className="bg-price-tag-bg pl-5 pr-3 py-1.5"
-        style={{
-          clipPath: "polygon(14px 0%, 100% 0%, 100% 100%, 14px 100%, 0% 50%)",
-        }}
+        className={`font-mono font-bold tabular-nums text-[20px] leading-none tracking-tight ${
+          highConfidence ? "text-ink" : "text-ink-soft"
+        }`}
       >
-        <span
-          aria-hidden
-          className="absolute left-[7px] top-1/2 -translate-y-1/2 w-[6px] h-[6px] rounded-full bg-price-tag-hole border border-price-tag-outline"
-        />
-        <div className="font-mono font-bold text-price-tag-price text-xl leading-none tracking-tight">
-          {!highConfidence && <span className="text-price-tag-approx/60">~</span>}${price.toFixed(2)}
-        </div>
-        {perUnit !== null ? (
-          <div className="font-mono text-[11px] font-bold text-price-tag-unit/70 leading-none mt-0.5">
-            ${perUnit.toFixed(2)}/{perUnitLabel}
-          </div>
-        ) : priceUnit === "each" ? (
-          <div className="font-mono text-[11px] font-bold text-price-tag-unit/70 leading-none mt-0.5">
-            /each
-          </div>
-        ) : null}
+        <span className={FIELD_LABEL}>{priceLabel}</span>
+        {!highConfidence && <span className="font-normal text-ink-muted">~</span>}${price.toFixed(2)}
       </div>
+      {unitLine !== null && (
+        <div className="mt-1.5 font-mono tabular-nums text-[11px] leading-none text-ink-muted">
+          <span className={FIELD_LABEL}>Unit Price:</span>
+          {unitLine}
+        </div>
+      )}
     </div>
   );
 }

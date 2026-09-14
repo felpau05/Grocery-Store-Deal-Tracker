@@ -77,7 +77,13 @@ def run_optimizer(body: OptimizeRequest):
                 "merchant_name": sp.merchant_name,
                 "subtotal": sp.subtotal,
                 "items": [
-                    {"query": i.query, "item_id": i.item_id, "name": i.name, "price": i.price}
+                    {
+                        "query": i.query,
+                        "item_id": i.item_id,
+                        "name": i.name,
+                        "price": i.price,
+                        "product_image": i.product_image,
+                    }
                     for i in sp.items
                 ],
             }

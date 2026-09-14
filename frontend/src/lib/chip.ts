@@ -50,24 +50,29 @@ export const CHIP_ACTIVE = "bg-ink/70 border-paper/85 text-paper";
    and faded rather than removed so the row keeps its shape. */
 export const CHIP_DISABLED = "bg-ink/25 border-paper/25 text-paper/50";
 
-/* Paginator-only light variant. CHIP_QUIET's dark-ink glass above is
-   deliberate for the header/hero — it has to hold up over the coral
-   hero, the dark rind header, AND the pale rind page gradient all at
-   once. The paginator no longer sits on any of those (it's directly on
-   the page's own pale striped background now, no gradient panel behind
-   it), so it can go the other way instead: a near-white glass with dark
-   text and a solid ink rim, closer to how the rest of the app's cards
-   read. Scoped to the paginator alone — CHIP_QUIET/CHIP_ACTIVE stay
-   exactly as they are for SiteHeader and MelonHero's CTA. */
-export const CHIP_QUIET_LIGHT =
-  "bg-white/70 border-ink/70 text-ink hover:bg-white/90 hover:border-ink";
+/* ── Body chips (everything OUTSIDE the header) ──────────────────────
+   The dark-ink glass above is the HEADER's chip and stays exactly as it
+   is — the header is the one surface that keeps its brutalist treatment,
+   and these constants are what make that a deliberate contrast rather
+   than an inconsistency. Do not use CHIP_QUIET/CHIP_ACTIVE below the
+   header; do not use these two inside it.
 
-/* Was bg-white/35 + text-ink/40 — a translucent white on a page that's
-   ALSO pale, so a disabled chip and an enabled one differed mainly in
-   how bold the border was, easy to miss at a glance. This version
-   trades translucency for an actual flat grey wash — bg-ink/8 reads as
-   dull stone rather than "lighter white" next to CHIP_QUIET_LIGHT's
-   crisp bg-white/70, and ink-soft (already a mid-grey token) at half
-   opacity keeps the glyph itself visibly faded rather than just a
-   thinner black. */
-export const CHIP_DISABLED_LIGHT = "bg-ink/8 border-ink/15 text-ink-soft/50";
+   The light pair used to be "CHIP but near-white glass", inheriting
+   CHIP's `border-2` + mono caps + backdrop blur. They're now built from
+   their own base instead: on white cards a 2px rim and an uppercase mono
+   label are exactly the two things that made the body read as brutalist. */
+export const CHIP_SOFT =
+  "inline-flex items-center justify-center gap-1.5 rounded-control border text-[13px] font-semibold " +
+  "px-3 py-1.5 transition-colors disabled:pointer-events-none disabled:cursor-not-allowed";
+
+export const CHIP_QUIET_LIGHT =
+  "bg-surface border-line text-ink hover:bg-surface-2 hover:border-line-strong";
+
+/* Current page / selected. A filled accent, not "the same chip but more
+   tinted" — on a calm layout the selected state is allowed to be the one
+   saturated thing in the row, and it needs to survive being surrounded
+   by white. */
+export const CHIP_ACTIVE_LIGHT =
+  "bg-accent border-accent text-white hover:bg-accent-dark hover:border-accent-dark";
+
+export const CHIP_DISABLED_LIGHT = "bg-surface-2 border-line text-ink-muted";

@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import { Archivo_Black, Space_Grotesk, Space_Mono } from "next/font/google";
 import "./globals.css";
 import CartDrawer from "@/components/CartDrawer";
+import TripPicker from "@/components/TripPicker";
 import MelonCorner from "@/components/MelonCorner";
 import PageLiquid from "@/components/PageLiquid";
 import SiteHeader from "@/components/SiteHeader";
 import ViewportHeightFix from "@/components/ViewportHeightFix";
 import { AccountProvider } from "@/lib/account";
-import { CartProvider } from "@/lib/cart";
-import { PlansProvider } from "@/lib/plans";
+import { TripsProvider } from "@/lib/trips";
 import { ToastProvider } from "@/lib/toast";
 
 const archivo = Archivo_Black({
@@ -71,14 +71,13 @@ export default function RootLayout({
         <ViewportHeightFix />
         <ToastProvider>
           <AccountProvider>
-            <CartProvider>
-              <PlansProvider>
-                <SiteHeader />
-                {children}
-                <CartDrawer />
-                <MelonCorner />
-              </PlansProvider>
-            </CartProvider>
+            <TripsProvider>
+              <SiteHeader />
+              {children}
+              <CartDrawer />
+              <TripPicker />
+              <MelonCorner />
+            </TripsProvider>
           </AccountProvider>
         </ToastProvider>
       </body>

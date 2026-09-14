@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import GlassCard, { GLASS_SURFACE_DENSE } from "@/components/GlassCard";
+import { BTN_SECONDARY } from "@/lib/button";
 import type {
   Account,
   DealStatus,
@@ -25,23 +26,75 @@ const EXPIRY_OPTIONS: { days: number | null; label: string }[] = [
   { days: 7, label: "This week" },
 ];
 
-/** One standalone card — Sort by, Stores, Categories, and Filters are
- * each their own separate box with a gap between them, not one shared
- * container with internal dividers.
+/** Separate cards, stacked with a gap.
  *
- * The same `.deal-card-glow` + `<LiquidGlow />` ring every product card
- * wears — that pink/tan tint you see on a deal card isn't a flat colour
- * at all, it's this shared shader ring bleeding through the blur — but
- * `GLASS_SURFACE_DENSE`, not GlassCard's default `GLASS_SURFACE`: this
- * panel is mostly small filter/sort labels, not a headline or a photo,
- * and `GLASS_SURFACE`'s /90 opacity still left those labels short of
- * AA contrast at the page gradient's deepest stop. `/95` clears it. */
-const CARD_TITLE = "font-display text-ink text-[15px] leading-tight";
+ * These were one card with hairline-separated bands for a while, on the
+ * argument that the rail is really a single control panel and four
+ * elevations for it made the page noisy. In practice the bands read as
+ * stuck together: a collapsed section and an open one are the same slab
+ * of white, so the only thing saying where "Sort by" ends and "Your
+ * stores" begins is a 1px rule doing the work of a boundary between two
+ * independent controls.
+ *
+ * They're separate cards again. Each section owns its own surface, and
+ * the gap between them — not a hairline — is what separates them. No
+ * control was added or removed in either direction; this is purely how
+ * the same set of controls is grouped. */
 
-/** Eyebrow above a group inside Filters — DealCard's merchant line. */
-const EYEBROW = "font-mono font-bold text-[10px] uppercase tracking-[0.14em] text-ink-soft";
+/** Section heading. Sentence case, not the old uppercase letterspaced
+ *  mono — the count beside it stays mono because it's a number. */
+const SECTION_TITLE = "text-[13px] font-semibold text-ink";
 
-function Card({
+/** A sub-label inside Filters ("Deal status", "Expires", …). One tier
+ *  quieter than a section heading, still sentence case. */
+const GROUP_LABEL = "text-[12px] font-semibold text-ink-soft";
+
+/** Per-row item counts, and only those. Mono + tabular so a column of
+ *  them lines up; `ink-muted` because they're skim-past metadata. */
+const ROW_COUNT = "font-mono tabular-nums text-[12px] text-ink-muted shrink-0";
+
+/** Disclosure affordance. Two explicit paths rather than a rotated one
+ *  — `rotate-*` is off the table in this redesign. */
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className="text-ink-muted shrink-0"
+    >
+      <path d={open ? "M4 10l4-4 4 4" : "M4 6l4 4 4-4"} />
+    </svg>
+  );
+}
+
+function Check() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="10"
+      height="10"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M3 8.5l3.5 3.5L13 4.5" />
+    </svg>
+  );
+}
+
+/** One card in the rail. It brings its own padding, so it composes
+ *  GLASS_SURFACE_DENSE rather than GLASS_SURFACE. */
+function Section({
   title,
   count,
   children,
@@ -56,83 +109,90 @@ function Card({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const showBody = !collapsible || open;
+  const heading = (
+    <span className={SECTION_TITLE}>
+      {title}
+      {count !== undefined && count > 0 && (
+        <span className="font-mono tabular-nums text-[12px] font-normal text-ink-muted"> {count}</span>
+      )}
+    </span>
+  );
   return (
-    // No `interactive`/hover-translate — unlike DealCard, these boxes
-    // aren't a single clickable link, so there's no one gesture for a
-    // hover state to respond to.
-    <GlassCard surfaceClassName={`${GLASS_SURFACE_DENSE} p-4`}>
+    <GlassCard surfaceClassName={`${GLASS_SURFACE_DENSE} px-4 py-3.5`}>
       {collapsible ? (
         <button
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
-          className={`w-full flex items-center justify-between gap-2 ${CARD_TITLE} hover:text-sale transition-colors`}
+          className="w-full flex items-center justify-between gap-2 text-left group"
         >
-          <span>
-            {title}
-            {count !== undefined && count > 0 && (
-              <span className="font-mono text-[12px] text-ink-soft"> ({count})</span>
-            )}
-          </span>
-          <span aria-hidden className="font-mono text-[14px] leading-none">{open ? "−" : "+"}</span>
+          {heading}
+          <Chevron open={open} />
         </button>
       ) : (
-        <div className={`${CARD_TITLE} mb-2.5`}>
-          {title}
-          {count !== undefined && count > 0 && (
-            <span className="font-mono text-[12px] text-ink-soft"> ({count})</span>
-          )}
-        </div>
+        <div className="flex items-center justify-between gap-2">{heading}</div>
       )}
-      {showBody && <div className={collapsible ? "mt-3 pt-3 border-t border-ink/10" : ""}>{children}</div>}
+      {showBody && <div className="mt-3">{children}</div>}
     </GlassCard>
   );
 }
 
-/** One row within a checkbox card — Stores and Categories, both
- * genuinely multi-select: any number can be checked at once. */
+/** The shared geometry of a selectable list row. The full-bleed is on
+ *  the LIST wrapper (`-mx-4`, cancelling Section's px-4), not on each
+ *  row: a row that pulls itself wider than its own parent overflows any
+ *  scroll container it's later put inside, and `overflow-y: auto` drags
+ *  overflow-x to auto with it. Rows just fill the wrapper instead.
+ *  Selected rows therefore still read as a band across the whole rail. */
+const LIST_ROW =
+  "w-full flex items-center gap-2.5 px-4 py-2 text-left text-[13px] transition-colors";
+
+/** Cancels Section's px-4 so the rows inside run edge to edge. */
+const LIST_BLEED = "-mx-4";
+
+/** One row within a multi-select list — Stores, genuinely multi-select:
+ * any number can be checked at once. Selected is an accent tint plus a
+ * filled accent check; unselected is transparent, and the hairline
+ * above it is the only line it owns. */
 function CheckboxRow({
   checked,
   onClick,
   children,
   count,
+  first = false,
 }: {
   checked: boolean;
   onClick: () => void;
   children: ReactNode;
   count?: number;
+  first?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
       aria-pressed={checked}
-      className={`w-full flex items-center gap-2 text-left text-[13px] font-mono font-bold px-2 py-1.5 border-2 mb-1 last:mb-0 transition-all ${
-        checked
-          ? "bg-produce/90 backdrop-blur-sm text-paper border-ink/70"
-          : "border-transparent text-ink-soft hover:border-ink hover:text-ink hover:bg-tag/25"
+      className={`${LIST_ROW} ${first ? "" : "border-t border-line"} ${
+        checked ? "bg-accent-soft text-ink font-medium" : "text-ink-soft hover:bg-surface-2 hover:text-ink"
       }`}
     >
       <span
         aria-hidden
-        className={`flex-shrink-0 w-4 h-4 border-2 flex items-center justify-center text-[10px] leading-none ${
-          checked ? "bg-paper border-paper text-produce" : "border-current"
+        className={`shrink-0 w-4 h-4 rounded-[5px] border flex items-center justify-center ${
+          checked ? "bg-accent border-accent text-white" : "border-line-strong"
         }`}
       >
-        {checked && "✓"}
+        {checked && <Check />}
       </span>
       <span className="truncate flex-1">{children}</span>
-      {count !== undefined && (
-        <span className={checked ? "opacity-80" : "opacity-60"}>{count}</span>
-      )}
+      {count !== undefined && <span className={ROW_COUNT}>{count}</span>}
     </button>
   );
 }
 
-/** The "All" row pinned to the top of Stores and Categories. Same shape
- * and counts column as CheckboxRow so it reads as part of the same list,
- * but it's a radio, not a checkbox: "all" isn't one more thing you can
- * tick alongside three stores, it's the state of having ticked nothing.
- * Hence the dot rather than a ✓, and a rule under it separating it from
- * the options it summarises. */
+/** The "All" row pinned to the top of Stores. Same shape and counts
+ * column as CheckboxRow so it reads as part of the same list, but it's
+ * a radio, not a checkbox: "all" isn't one more thing you can tick
+ * alongside three stores, it's the state of having ticked nothing.
+ * Hence the dot rather than a ✓, and a stronger rule under it
+ * separating it from the options it summarises. */
 function AllRow({
   checked,
   onClick,
@@ -146,39 +206,37 @@ function AllRow({
 }) {
   return (
     /* The rule lives on a wrapper, not as a border-b on the button —
-       the button already sets all four borders per state, and stacking a
-       `border-b-*` colour on top of that depends on which of the two
-       lands later in Tailwind's output. */
-    <div className="mb-2 pb-2 border-b border-ink/10">
+       the button's own background (bg-accent-soft when selected) would
+       otherwise paint right up to a border whose colour has to read
+       against the NEXT row, not this one. */
+    <div className="border-b border-line-strong">
       <button
         onClick={onClick}
         aria-pressed={checked}
-        className={`w-full flex items-center gap-2 text-left text-[13px] font-mono font-bold px-2 py-1.5 border-2 transition-all ${
-          checked
-            ? "bg-produce/90 backdrop-blur-sm text-paper border-ink/70"
-            : "border-transparent text-ink-soft hover:border-ink hover:text-ink hover:bg-tag/25"
+        className={`${LIST_ROW} ${
+          checked ? "bg-accent-soft text-ink font-medium" : "text-ink-soft hover:bg-surface-2 hover:text-ink"
         }`}
       >
         <span
           aria-hidden
-          className={`flex-shrink-0 w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-            checked ? "bg-paper border-paper" : "border-current"
+          className={`shrink-0 w-4 h-4 rounded-full border flex items-center justify-center ${
+            checked ? "bg-accent border-accent" : "border-line-strong"
           }`}
         >
-          {checked && <span className="w-1.5 h-1.5 rounded-full bg-produce" />}
+          {checked && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
         </span>
         <span className="truncate flex-1">{children}</span>
-        {count !== undefined && (
-          <span className={checked ? "opacity-80" : "opacity-60"}>{count}</span>
-        )}
+        {count !== undefined && <span className={ROW_COUNT}>{count}</span>}
       </button>
     </div>
   );
 }
 
-/** Single-select row — still used inside Filters (deal status, expiry:
- * exactly one applies at a time, unlike stores/categories). */
-function Row({
+/** A quiet option pill — deal status, expiry, priced-by. Single- and
+ *  multi-select both land here; the difference is what the caller does
+ *  on click, not how the chosen option looks. Deliberately NOT
+ *  lib/chip.ts's CHIP_*: those are the header's dark-ink glass. */
+function OptionPill({
   active,
   onClick,
   children,
@@ -190,16 +248,78 @@ function Row({
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left text-[13px] font-mono font-bold px-2 py-1.5 border-2 mb-1 last:mb-0 transition-all ${
+      aria-pressed={active}
+      className={`rounded-pill px-2.5 py-1 text-[12px] font-medium border transition-colors ${
         active
-          ? "bg-produce/90 backdrop-blur-sm text-paper border-ink/70"
-          : "border-transparent text-ink-soft hover:border-ink hover:text-ink hover:bg-tag/25"
+          ? "bg-accent border-accent text-white"
+          : "bg-surface border-line text-ink-soft hover:border-line-strong hover:text-ink"
       }`}
     >
       {children}
     </button>
   );
 }
+
+/** Segmented control: one track, N segments, exactly one lit. Used for
+ *  the two sort axes (what to sort by, which direction) and for
+ *  /settings' All stores / Grocery stores switch — all either/or
+ *  choices, which a segmented track says better than two loose buttons
+ *  do. Exported so settings wears the same control rather than a
+ *  lookalike; see "check before hand-rolling" in CLAUDE.md. */
+export function Segmented<T extends string>({
+  value,
+  options,
+  onSelect,
+  label,
+  className = "",
+}: {
+  value: T;
+  options: { id: T; label: string }[];
+  onSelect: (id: T) => void;
+  label: string;
+  /** Extra classes for the track — e.g. `shrink-0` where it shares a
+   *  flex row with something that would otherwise squeeze it. */
+  className?: string;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={label}
+      className={`flex items-center gap-1 rounded-control border border-line bg-surface-2 p-1 ${className}`}
+    >
+      {options.map((o) => (
+        <button
+          key={o.id}
+          onClick={() => onSelect(o.id)}
+          aria-pressed={value === o.id}
+          /* whitespace-nowrap: a segment label is a name, not copy, and
+             breaking one across two lines makes the track grow a row and
+             read as two stacked controls rather than one. Two-word
+             labels like "Grocery stores" wrapped without it. The parent
+             row wraps instead when there genuinely isn't space. */
+          className={`flex-1 whitespace-nowrap rounded-[7px] px-2 py-1.5 text-[12px] font-semibold transition-colors ${
+            value === o.id ? "bg-accent text-white shadow-soft" : "text-ink-soft hover:text-ink"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const PRICE_INPUT =
+  "w-full min-w-0 rounded-control bg-surface border border-line px-2.5 py-1.5 font-mono tabular-nums text-[13px] text-ink placeholder:text-ink-muted focus:border-line-strong transition-colors";
+
+const SORT_MODES: { id: SortMode; label: string }[] = [
+  { id: "price", label: "Price" },
+  { id: "price_per_unit", label: "Unit Price" },
+];
+
+const SORT_DIRS: { id: SortDir; label: string }[] = [
+  { id: "asc", label: "Cheapest first" },
+  { id: "desc", label: "Priciest first" },
+];
 
 function toggle<T>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
@@ -211,10 +331,6 @@ export default function DealsSidebar({
   selectedMerchantIds,
   setSelectedMerchantIds,
   merchantCounts,
-  categories,
-  selectedCategories,
-  setSelectedCategories,
-  categoryCounts,
   sort,
   setSort,
   sortDir,
@@ -237,10 +353,6 @@ export default function DealsSidebar({
   selectedMerchantIds: number[];
   setSelectedMerchantIds: (fn: (prev: number[]) => number[]) => void;
   merchantCounts: Map<number, number>;
-  categories: string[];
-  selectedCategories: string[];
-  setSelectedCategories: (fn: (prev: string[]) => string[]) => void;
-  categoryCounts: Map<string, number>;
   sort: SortMode;
   setSort: (s: SortMode) => void;
   sortDir: SortDir;
@@ -258,48 +370,48 @@ export default function DealsSidebar({
   advancedCount: number;
   onClearAdvanced: () => void;
 }) {
-  // Two different totals, and they sit in two different places. The
-  // number beside the CARD TITLE counts the options themselves (how many
-  // stores / how many categories there are to pick from); the number on
-  // the "All" row inside counts the ITEMS those options add up to, the
-  // same kind of number every individual row shows.
+  // The number beside the SECTION TITLE counts the options themselves
+  // (how many stores there are to pick from); the number on the "All"
+  // row inside counts the ITEMS those options add up to, the same kind
+  // of number every individual row shows.
   const storeItems = [...merchantCounts.values()].reduce((a, b) => a + b, 0);
-  const catItems = [...categoryCounts.values()].reduce((a, b) => a + b, 0);
   const hasOwnStores = !!user && user.merchants.length > 0;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="space-y-3">
       {/* Filters — everything secondary/advanced (deal status, expiry,
-          price range, priced-by) bundled into one expandable card, kept
-          separate from Sort/Stores/Categories below. Collapsed by
-          default so the sidebar isn't a wall of options up front. */}
-      <Card title="Filters" count={advancedCount} collapsible defaultOpen={false}>
+          price range, priced-by) bundled into one expandable section,
+          kept separate from Sort/Stores/Categories below. Collapsed by
+          default so the rail isn't a wall of options up front. */}
+      <Section title="Filters" count={advancedCount} collapsible defaultOpen={false}>
         <div className="mb-4 last:mb-0">
-          <div className={`${EYEBROW} mb-1.5`}>
-            Deal status
+          <div className={`${GROUP_LABEL} mb-2`}>Deal status</div>
+          <div className="flex flex-wrap gap-1.5">
+            {STATUSES.map((s) => (
+              <OptionPill key={s.id} active={status === s.id} onClick={() => setStatus(s.id)}>
+                {s.label}
+              </OptionPill>
+            ))}
           </div>
-          {STATUSES.map((s) => (
-            <Row key={s.id} active={status === s.id} onClick={() => setStatus(s.id)}>
-              {s.label}
-            </Row>
-          ))}
         </div>
 
         <div className="mb-4 last:mb-0">
-          <div className={`${EYEBROW} mb-1.5`}>
-            Expires
+          <div className={`${GROUP_LABEL} mb-2`}>Expires</div>
+          <div className="flex flex-wrap gap-1.5">
+            {EXPIRY_OPTIONS.map((o) => (
+              <OptionPill
+                key={String(o.days)}
+                active={expDays === o.days}
+                onClick={() => setExpDays(o.days)}
+              >
+                {o.label}
+              </OptionPill>
+            ))}
           </div>
-          {EXPIRY_OPTIONS.map((o) => (
-            <Row key={String(o.days)} active={expDays === o.days} onClick={() => setExpDays(o.days)}>
-              {o.label}
-            </Row>
-          ))}
         </div>
 
         <div className="mb-4 last:mb-0">
-          <div className={`${EYEBROW} mb-1.5`}>
-            Price range
-          </div>
+          <div className={`${GROUP_LABEL} mb-2`}>Price range</div>
           <div className="flex items-center gap-2">
             <input
               type="number"
@@ -307,137 +419,106 @@ export default function DealsSidebar({
               step="0.5"
               value={priceMin}
               onChange={(e) => setPriceMin(e.target.value)}
-              placeholder="min $"
-              className="w-full min-w-0 bg-paper border-2 border-ink px-2 py-1 font-mono text-[13px] text-ink placeholder:text-ink-soft/60 focus:bg-tag/20 outline-none transition-colors"
+              placeholder="Min $"
+              aria-label="Minimum price"
+              className={PRICE_INPUT}
             />
-            <span className="font-mono font-bold text-ink-soft">–</span>
+            <span aria-hidden className="text-ink-muted">
+              –
+            </span>
             <input
               type="number"
               min="0"
               step="0.5"
               value={priceMax}
               onChange={(e) => setPriceMax(e.target.value)}
-              placeholder="max $"
-              className="w-full min-w-0 bg-paper border-2 border-ink px-2 py-1 font-mono text-[13px] text-ink placeholder:text-ink-soft/60 focus:bg-tag/20 outline-none transition-colors"
+              placeholder="Max $"
+              aria-label="Maximum price"
+              className={PRICE_INPUT}
             />
           </div>
         </div>
 
         <div>
-          <div className={`${EYEBROW} mb-1.5`}>
-            Priced by
-          </div>
-          <div className="flex gap-1">
-            {(["g", "ml", "each"] as PriceUnit[]).map((u) => {
-              const on = priceUnits.includes(u);
-              const label = u === "g" ? "Weight" : u === "ml" ? "Volume" : "Each";
-              return (
-                <button
-                  key={u}
-                  onClick={() => setPriceUnits((prev) => toggle(prev, u))}
-                  className={`flex-1 text-[12px] font-mono font-bold px-1.5 py-1 border-2 transition-all ${
-                    on
-                      ? "bg-produce/90 backdrop-blur-sm text-paper border-ink/70"
-                      : "border-ink/25 text-ink-soft hover:border-ink hover:text-ink"
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
+          <div className={`${GROUP_LABEL} mb-2`}>Priced by</div>
+          <div className="flex flex-wrap gap-1.5">
+            {(["g", "ml", "each"] as PriceUnit[]).map((u) => (
+              <OptionPill
+                key={u}
+                active={priceUnits.includes(u)}
+                onClick={() => setPriceUnits((prev) => toggle(prev, u))}
+              >
+                {u === "g" ? "Weight" : u === "ml" ? "Volume" : "Each"}
+              </OptionPill>
+            ))}
           </div>
         </div>
 
         {advancedCount > 0 && (
-          <button
-            onClick={onClearAdvanced}
-            className="w-full mt-4 text-[12px] font-mono font-bold uppercase tracking-[0.1em] px-2 py-1.5 border-2 border-ink bg-tag/85 backdrop-blur-sm text-ink hover:bg-tag/60 transition-colors"
-          >
+          <button onClick={onClearAdvanced} className={`${BTN_SECONDARY} w-full mt-4`}>
             Clear filters ({advancedCount})
           </button>
         )}
-      </Card>
+      </Section>
 
-      <Card title="Sort by" collapsible>
-        <div className="flex items-center border-2 border-ink bg-paper/85 backdrop-blur-sm p-0.5 mb-2">
-          {(["price", "price_per_unit"] as SortMode[]).map((s) => (
-            <button
-              key={s}
-              onClick={() => setSort(s)}
-              className={`flex-1 text-[12px] font-mono font-bold px-2 py-1 transition-colors ${
-                sort === s ? "bg-produce/90 backdrop-blur-sm text-paper" : "text-ink-soft hover:text-ink"
-              }`}
-            >
-              {s === "price" ? "$ total" : "$/unit"}
-            </button>
-          ))}
+      <Section title="Sort by" collapsible>
+        <div className="flex flex-col gap-2">
+          <Segmented value={sort} options={SORT_MODES} onSelect={setSort} label="Sort by" />
+          <Segmented
+            value={sortDir}
+            options={SORT_DIRS}
+            /* The prop is an updater, not a plain setter — hand it a
+               function that ignores the previous direction rather than
+               changing the page's interface for this. */
+            onSelect={(d) => setSortDir(() => d)}
+            label="Sort direction"
+          />
         </div>
-        <button
-          onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-          className="w-full text-[12px] font-mono font-bold px-2 py-1 border-2 border-ink bg-paper/85 backdrop-blur-sm text-ink hover:bg-tag/30 transition-colors"
-        >
-          {sortDir === "asc" ? "↑ Cheapest first" : "↓ Priciest first"}
-        </button>
-      </Card>
+      </Section>
 
       {pillMerchants.length > 0 && (
         /* "Your stores" whichever account it is — the heading is read by
            the person who owns them, so their own name adds nothing. */
-        <Card title={hasOwnStores ? "Your stores" : "Stores"} count={pillMerchants.length} collapsible>
+        <Section
+          title={hasOwnStores ? "Your stores" : "Stores"}
+          count={pillMerchants.length}
+          collapsible
+        >
           {/* "All" is a real row, checked exactly when nothing else is —
               which is already what an empty selection MEANS to the deals
               query. Picking it clears back to that, so it doubles as the
               clear button the footer used to carry. */}
-          <AllRow
-            checked={selectedMerchantIds.length === 0}
-            onClick={() => setSelectedMerchantIds(() => [])}
-            count={storeItems || undefined}
-          >
-            All stores
-          </AllRow>
-          {pillMerchants.map((m) => (
-            <CheckboxRow
-              key={m.id}
-              checked={selectedMerchantIds.includes(m.id)}
-              onClick={() => setSelectedMerchantIds((prev) => toggle(prev, m.id))}
-              count={merchantCounts.get(m.id)}
+          <div className={LIST_BLEED}>
+            <AllRow
+              checked={selectedMerchantIds.length === 0}
+              onClick={() => setSelectedMerchantIds(() => [])}
+              count={storeItems || undefined}
             >
-              {m.name}
-            </CheckboxRow>
-          ))}
+              All stores
+            </AllRow>
+            {pillMerchants.map((m, i) => (
+              <CheckboxRow
+                key={m.id}
+                first={i === 0}
+                checked={selectedMerchantIds.includes(m.id)}
+                onClick={() => setSelectedMerchantIds((prev) => toggle(prev, m.id))}
+                count={merchantCounts.get(m.id)}
+              >
+                {m.name}
+              </CheckboxRow>
+            ))}
+          </div>
           {user && (
-            <div className="flex justify-end mt-1">
+            <div className="flex justify-end mt-2">
               <Link
                 href="/settings"
-                className="text-[12px] font-mono font-bold text-ink-soft hover:text-sale transition-colors"
+                className="text-[12px] font-medium text-ink-muted hover:text-accent transition-colors"
               >
-                ✎ edit stores
+                Edit stores
               </Link>
             </div>
           )}
-        </Card>
-      )}
-
-      {categories.length > 0 && (
-        <Card title="Categories" count={categories.length} collapsible>
-          <AllRow
-            checked={selectedCategories.length === 0}
-            onClick={() => setSelectedCategories(() => [])}
-            count={catItems || undefined}
-          >
-            All categories
-          </AllRow>
-          {categories.map((c) => (
-            <CheckboxRow
-              key={c}
-              checked={selectedCategories.includes(c)}
-              onClick={() => setSelectedCategories((prev) => toggle(prev, c))}
-              count={categoryCounts.get(c)}
-            >
-              {c}
-            </CheckboxRow>
-          ))}
-        </Card>
+        </Section>
       )}
     </div>
   );

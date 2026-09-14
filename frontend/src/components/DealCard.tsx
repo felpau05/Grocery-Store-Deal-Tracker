@@ -1,148 +1,145 @@
 import Link from "next/link";
 import type { Deal } from "@/lib/api";
 import AddToListButton from "./AddToListButton";
-import GlassCard, { GLASS_SURFACE } from "./GlassCard";
+import GlassCard, { GLASS_SURFACE_DENSE } from "./GlassCard";
+import { FIELD_LABEL } from "@/lib/fieldLabel";
 import PriceTag from "./PriceTag";
 
-const CATEGORY_COLORS: Record<string, string> = {
-  meat: "bg-sale/10 text-sale-dark",
-  seafood: "bg-sale/10 text-sale-dark",
-  "meat seafood": "bg-sale/10 text-sale-dark",
-  deli: "bg-sale/10 text-sale-dark",
-  alcohol: "bg-sale/10 text-sale-dark",
-  produce: "bg-produce/10 text-produce",
-  beverages: "bg-produce/10 text-produce",
-  international: "bg-produce/10 text-produce",
-  pets: "bg-produce/10 text-produce",
-  dairy: "bg-ink/5 text-ink-soft",
-  "dairy eggs": "bg-ink/5 text-ink-soft",
-  frozen: "bg-ink/5 text-ink-soft",
-  "canned goods": "bg-ink/5 text-ink-soft",
-  "personal care": "bg-ink/5 text-ink-soft",
-  household: "bg-ink/5 text-ink-soft",
-  other: "bg-ink/5 text-ink-soft",
-  bakery: "bg-tag/30 text-ink-soft",
-  breakfast: "bg-tag/30 text-ink-soft",
-  "breakfast and cereal": "bg-tag/30 text-ink-soft",
-  "dry goods pasta": "bg-tag/30 text-ink-soft",
-  pantry: "bg-tag/30 text-ink-soft",
-  snacks: "bg-tag/30 text-ink-soft",
-  babies: "bg-tag/30 text-ink-soft",
-};
-
-function formatSize(size: number | null, unit: "g" | "ml" | null): string | null {
-  if (size === null || unit === null) return null;
-  if (size >= 1000) return `${(size / 1000).toFixed(size % 1000 === 0 ? 0 : 1)} ${unit === "g" ? "kg" : "L"}`;
-  return `${size} ${unit}`;
-}
-
-function expiryInfo(validTo: string): { label: string; urgent: boolean } {
+/**
+ * Only "gone today or tomorrow" (or already gone) changes whether you
+ * click. A full "Expires Sep 16" is detail-page material, so anything
+ * further out returns null and the card renders no expiry at all —
+ * every card carrying a date was most of what made the old meta rows
+ * look like a spec sheet.
+ */
+function urgentExpiry(validTo: string): string | null {
   // Date-only strings parse as UTC midnight; pin to local so "today" is right.
   const end = new Date(validTo.length === 10 ? `${validTo}T00:00:00` : validTo);
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const days = Math.round((startOfDay(end) - startOfDay(new Date())) / 86_400_000);
 
-  if (days < 0) return { label: "Expired", urgent: true };
-  if (days === 0) return { label: "Expires today", urgent: true };
-  if (days === 1) return { label: "Expires tomorrow", urgent: true };
-  return {
-    label: `Expires ${end.toLocaleDateString("en-CA", { month: "short", day: "numeric" })}`,
-    urgent: days <= 2,
-  };
+  if (days < 0) return "Expired";
+  if (days === 0) return "Ends today";
+  if (days === 1) return "Ends tomorrow";
+  return null;
 }
 
-function dealScore(perUnit: number, categoryAvg: number): { emoji: string; label: string } {
-  const ratio = perUnit / categoryAvg;
-  if (ratio < 0.85) return { emoji: "🟢", label: "Great deal" };
-  if (ratio <= 1.1) return { emoji: "🟡", label: "Fair" };
-  return { emoji: "🔴", label: "Pricey" };
-}
-
+/**
+ * One deal in the grid.
+ *
+ * This card used to render nine things at once — image, merchant in
+ * letterspaced mono caps, name, a rotated price sticker, a colour-coded
+ * category pill, size, brand list, an expiry line, and a 🟢/🟡/🔴
+ * "deal-o-meter" verdict — twenty-four times a screen. The brief for
+ * the redesign was that a card only has to tell you whether to click
+ * it, so it is now: picture, name, price, store. Category, size,
+ * brands, the non-urgent expiry date and the verdict all still exist on
+ * the item detail page, one click away; none of them were deleted from
+ * the app, only from this face.
+ *
+ * The layout is a product tile rather than a row: a full-bleed 4:3
+ * image well at the top (clipped by the surface's own `rounded-card` +
+ * `overflow-hidden`, so it sits flush into the card's top edge) with
+ * the text block under it. That gives the photo roughly 8-10x the area
+ * the old 64px bordered thumbnail had, which makes it — not the price
+ * sticker — the thing you actually scan.
+ */
 export default function DealCard({
   deal,
-  categoryAvgPerUnit,
 }: {
   deal: Deal;
-  /** Average price-per-unit of visible deals in the same category, for the hover deal-o-meter. */
+  /**
+   * NOT RENDERED, and that is deliberate — do not go looking for the
+   * bug. Its only consumer was the hover "deal-o-meter" (this price vs
+   * the average price-per-unit of the visible deals in the same
+   * category), which was cut from the card face along with the other
+   * spec-sheet fields. The prop stays in the signature because three
+   * pages compute and pass it, and because the comparison is worth
+   * resurrecting somewhere with room for it — the item page, or a sort
+   * mode — rather than being thrown away.
+   */
   categoryAvgPerUnit?: number;
 }) {
-  const sizeLabel = formatSize(deal.size, deal.size_unit);
-  const categoryClass = deal.category ? CATEGORY_COLORS[deal.category] ?? "bg-ink/5 text-ink-soft" : null;
-  const expiry = expiryInfo(deal.valid_to);
-  const score =
-    deal.price_per_unit !== null && categoryAvgPerUnit
-      ? dealScore(deal.price_per_unit, categoryAvgPerUnit)
-      : null;
+  const expiry = urgentExpiry(deal.valid_to);
 
   return (
-    // interactive: true is the hover-lift (.deal-card-glow's own
-    // hover:-translate). `group`/`block` are added on top of the shared
-    // GLASS_SURFACE — `group` for `group-hover:text-sale` below, `block`
-    // since Link defaults to inline and this needs to be a block-level
-    // card. Neither conflicts with any GLASS_SURFACE utility, so it's
-    // safe to just append them.
-    <GlassCard as={Link} href={`/item/${deal.item_id}`} interactive surfaceClassName={`group block ${GLASS_SURFACE}`}>
-      <span className="sheen" aria-hidden />
-      <div className="flex items-start gap-3 mb-4">
+    // GLASS_SURFACE_DENSE, not GLASS_SURFACE: identical surface, minus
+    // the p-4. The image has to reach the card's edges, so the padding
+    // moves onto the text block below it.
+    //
+    // `interactive` is the wrapper's hover-lift; `group` drives the
+    // name's hover colour and the add button's wake-up; `block` because
+    // Link is inline by default and this is a block-level card.
+    <GlassCard
+      as={Link}
+      href={`/item/${deal.item_id}`}
+      interactive
+      surfaceClassName={`group block ${GLASS_SURFACE_DENSE}`}
+    >
+      <div className="relative aspect-[4/3] bg-surface-2">
+        {/* Sits UNDER the image rather than replacing it, so the same
+            markup covers both "no product_image" and "the URL 404'd"
+            (the onError below just hides the img and uncovers this).
+            A full-bleed well that collapses when there's no photo would
+            make every row of the grid a different height. */}
+        <span aria-hidden className="absolute inset-0 flex items-center justify-center text-ink-muted/30">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.25"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-10 w-10"
+          >
+            <rect x="3" y="3" width="18" height="18" rx="3" />
+            <circle cx="8.75" cy="9.25" r="1.4" />
+            <path d="M20.5 15.5 16 11l-5.25 5.25L8.25 13.75 3.5 18.5" />
+          </svg>
+        </span>
         {deal.product_image && (
           <img
             src={deal.product_image}
-            alt={deal.name}
-            className="w-16 h-16 object-contain flex-shrink-0 bg-paper border-2 border-ink/15"
-            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            // Empty alt on purpose: the card's accessible name comes
+            // from the product name right below, and announcing it
+            // twice per card is noise in a 24-card grid.
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className="absolute inset-0 h-full w-full object-contain p-3"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = "none";
+            }}
           />
         )}
-        <div className="flex-1 min-w-0">
-          <div className="font-mono font-bold text-[10px] uppercase tracking-[0.14em] text-ink-soft truncate">
-            {deal.merchant_name}
+        {expiry && (
+          <span className="badge-soft-danger absolute left-2.5 top-2.5 shadow-soft">{expiry}</span>
+        )}
+      </div>
+
+      <div className="p-4">
+        {/* The most legible element on the card, by design. */}
+        <h3 className="font-display line-clamp-2 text-[15px] leading-snug text-ink transition-colors group-hover:text-accent">
+          <span className={FIELD_LABEL}>Name:</span>
+          {deal.name}
+        </h3>
+
+        <div className="mt-3 flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <PriceTag
+              price={deal.price}
+              priceUnit={deal.price_unit}
+              perUnit={deal.price_per_unit}
+              perUnitLabel={deal.price_per_unit_label}
+              highConfidence={deal.high_confidence}
+            />
+            {/* Quiet and sentence case — it was uppercase letterspaced
+                mono, which made the store shout louder than the price. */}
+            <p className="mt-2 truncate text-[12px] text-ink-soft">
+              <span className={FIELD_LABEL}>Store:</span>
+              {deal.merchant_name}
+            </p>
           </div>
-          <h3 className="font-display text-ink text-[15px] leading-tight mt-0.5 group-hover:text-sale transition-colors">
-            {deal.name}
-          </h3>
-        </div>
-        <PriceTag
-          price={deal.price}
-          priceUnit={deal.price_unit}
-          perUnit={deal.price_per_unit}
-          perUnitLabel={deal.price_per_unit_label}
-          highConfidence={deal.high_confidence}
-        />
-      </div>
-
-      {/* One meta line instead of a separate bordered box per fact —
-          category still gets its own color-coded pill (it's the one
-          thing worth scanning for at a glance); size/brands are now
-          plain text, dot-separated, no borders of their own. Was 3
-          individually-outlined badges plus 2 more below fighting for
-          attention in two thin rows. */}
-      <div className="flex items-center gap-1.5 flex-wrap text-[11px] font-mono font-bold text-ink-soft">
-        {categoryClass && (
-          <span className={`uppercase tracking-[0.08em] text-[10px] px-1.5 py-0.5 ${categoryClass}`}>
-            {deal.category}
-          </span>
-        )}
-        {(sizeLabel || deal.brands.length > 0) && (
-          <span className="truncate">
-            {[sizeLabel, deal.brands.join(" · ")].filter(Boolean).join(" · ")}
-          </span>
-        )}
-      </div>
-
-      <div className="mt-3 flex items-center justify-between gap-2">
-        {expiry.urgent ? (
-          <span className="stamp text-sale-dark text-[9px]">{expiry.label}</span>
-        ) : (
-          <span className="text-[11px] font-mono text-ink-soft/80">{expiry.label}</span>
-        )}
-        <span className="flex items-center gap-2">
-          {/* Deal-o-meter: always visible — rates this price against the
-              category average of what's currently on screen. Plain text
-              now, not its own bordered badge — one less box. */}
-          {score && (
-            <span className="text-[10px] font-mono font-bold uppercase text-ink-soft whitespace-nowrap">
-              {score.emoji} {score.label}
-            </span>
-          )}
           <AddToListButton
             name={deal.name}
             compact
@@ -154,7 +151,7 @@ export default function DealCard({
               image: deal.product_image,
             }}
           />
-        </span>
+        </div>
       </div>
     </GlassCard>
   );

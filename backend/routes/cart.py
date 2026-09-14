@@ -4,15 +4,24 @@
     PUT    /cart               (whole-list replace, mirrors PUT /me/preferences'
                                  merchants-replace) -> the updated list
 
-    GET    /trip-plans         -> this account's saved plans, receipts
-                                   assembled fresh from current prices
-    POST   /trip-plans        -> save one
-    DELETE /trip-plans/{id}    -> remove one
+    GET    /trip-plans             -> this account's trips (named lists),
+                                       receipts assembled fresh from
+                                       current prices
+    POST   /trip-plans             -> create one (items may be empty)
+    PATCH  /trip-plans/{id}        -> rename / change mode
+    PUT    /trip-plans/{id}/items  -> whole-list replace of its items+picks
+    DELETE /trip-plans/{id}        -> remove one
+
+/cart is no longer called by the frontend — every account's cart was
+moved into a "My list" trip at startup (db/cart.py). Kept until that
+migration has been verified everywhere.
 
 Anonymous visitors never call these — the frontend keeps a local-only
 cart/plans for them. See db/cart.py for the storage shape and why a
 saved item_id is never a hard foreign key.
 """
+
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -36,13 +45,25 @@ class CartItemRequest(BaseModel):
 
 class SavedPlanItemRequest(BaseModel):
     query: str
-    item_id: int
+    label: str | None = None
+    item_id: int | None = None  # the pick — null until the trip is built
+    source_item_id: int | None = None  # the deal it was added from
+    merchant_id: int | None = None
+    merchant_name: str | None = None
+    price: float | None = None
+    image: str | None = None
+    added_at: float | None = None  # ms epoch
 
 
 class SavedPlanRequest(BaseModel):
     name: str | None = None
-    mode: str
-    items: list[SavedPlanItemRequest]
+    mode: Literal["cheapest", "fewest"] = "cheapest"
+    items: list[SavedPlanItemRequest] = []
+
+
+class SavedPlanUpdateRequest(BaseModel):
+    name: str | None = None
+    mode: Literal["cheapest", "fewest"] | None = None
 
 
 def _storage_error_or(detail: str) -> HTTPException:
@@ -77,6 +98,27 @@ def create_trip_plan(body: SavedPlanRequest, user: dict = Depends(get_current_us
     if created is None:
         raise HTTPException(status_code=503, detail="Storage limit reached — plan not saved")
     return created
+
+
+@router.patch("/trip-plans/{plan_id}")
+def update_trip_plan(plan_id: int, body: SavedPlanUpdateRequest, user: dict = Depends(get_current_user)):
+    # exclude_unset, not exclude_none: renaming a trip back to "untitled"
+    # is an explicit `"name": null`, which has to reach the UPDATE.
+    fields = body.model_dump(exclude_unset=True)
+    if fields.get("mode", "") is None:
+        fields.pop("mode")
+    updated = db.update_saved_plan(user["id"], plan_id, fields)
+    if updated is None:
+        raise _storage_error_or("Trip not found")
+    return updated
+
+
+@router.put("/trip-plans/{plan_id}/items")
+def put_trip_plan_items(plan_id: int, body: list[SavedPlanItemRequest], user: dict = Depends(get_current_user)):
+    updated = db.replace_saved_plan_items(user["id"], plan_id, [item.model_dump() for item in body])
+    if updated is None:
+        raise _storage_error_or("Trip not found")
+    return updated
 
 
 @router.delete("/trip-plans/{plan_id}")
