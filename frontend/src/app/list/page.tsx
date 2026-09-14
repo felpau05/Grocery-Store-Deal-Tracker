@@ -274,6 +274,7 @@ function TripView({ tripParam }: { tripParam: string }) {
     picks, setPick, plans, totalCost, swappable, lastQueries,
   } = useOptimize();
   const resultsRef = useRef<HTMLDivElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
   // The one layout question on this page that CSS cannot answer — see
   // the scroll in runBuild below, and the note in lib/viewport.ts.
   const wide = useWide();
@@ -439,20 +440,50 @@ function TripView({ tripParam }: { tripParam: string }) {
           page past the receipts beside it. */}
       <div className="wide:sticky wide:top-20 wide:max-h-[calc(100vh-6rem)] wide:overflow-y-auto wide:pr-1">
       {/* The name IS the heading, and editable in place — keyed on the
-          saved name so a rename from elsewhere (another tab) shows up. */}
+          saved name so a rename from elsewhere (another tab) shows up.
+          The hover border on the input is real, but it only shows up
+          once you're already hovering it — nothing upfront said "this is
+          editable" on a heading that otherwise looks like plain text, so
+          a pencil button sits beside it as a standing affordance. */}
       <header className="mb-6">
-        <input
-          key={trip.name ?? ""}
-          defaultValue={trip.name ?? ""}
-          placeholder="Untitled shopping trip"
-          aria-label="Shopping trip name"
-          onBlur={(e) => commitName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") e.currentTarget.blur();
-          }}
-          className="w-full bg-transparent font-display text-3xl sm:text-4xl text-ink leading-tight rounded-control -mx-2 px-2 py-1 border border-transparent hover:border-line focus:border-accent focus:bg-surface focus:outline-none placeholder:text-ink-muted transition-colors"
-        />
-        <p className="text-[13px] text-ink-muted mt-1">
+        <div className="flex items-center gap-1.5 -mx-2">
+          <input
+            ref={nameInputRef}
+            key={trip.name ?? ""}
+            defaultValue={trip.name ?? ""}
+            placeholder="Untitled shopping trip"
+            aria-label="Shopping trip name"
+            onBlur={(e) => commitName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+            }}
+            className="min-w-0 flex-1 bg-transparent font-display text-3xl sm:text-4xl text-ink leading-tight rounded-control px-2 py-1 border border-transparent hover:border-line focus:border-accent focus:bg-surface focus:outline-none placeholder:text-ink-muted transition-colors"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              nameInputRef.current?.focus();
+              nameInputRef.current?.select();
+            }}
+            aria-label="Rename this shopping trip"
+            title="Rename"
+            className="shrink-0 p-2 rounded-control text-ink-muted hover:text-accent hover:bg-surface-2 transition-colors"
+          >
+            <svg
+              aria-hidden
+              viewBox="0 0 16 16"
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M11.333 2 14 4.667l-8.5 8.5-3.417.917.917-3.417 8.333-8.334Z" />
+            </svg>
+          </button>
+        </div>
+        <p className="text-[13px] text-ink-muted mt-1 px-2">
           <span className="font-mono tabular-nums">{entries.length}</span> {entries.length === 1 ? "item" : "items"} ·
           saves automatically
         </p>
