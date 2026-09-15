@@ -23,7 +23,9 @@ export default function Home() {
   useHeroSnap("deals");
 
   return (
-    <main className="pb-16">
+    // No bottom padding at `wide:` — HomeHub is exactly one screen there,
+    // and any padding would be a strip you could still scroll into.
+    <main className="pb-16 wide:pb-0">
       <MelonHero />
       <HomeHub />
     </main>

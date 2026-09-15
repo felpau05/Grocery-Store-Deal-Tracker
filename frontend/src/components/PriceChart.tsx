@@ -3,25 +3,30 @@
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import type { HistoryPoint } from "@/lib/api";
 
+/** "2026-08-27" as a LOCAL date — `new Date("2026-08-27")` is UTC
+ *  midnight, which renders as Aug 26 anywhere west of Greenwich. */
+function shortDate(s: string): string {
+  return new Date(`${s}T00:00:00`).toLocaleDateString("en-CA", { month: "short", day: "numeric" });
+}
+
 /**
- * 30-day price history. Everything structural (grid, axes, tooltip
- * frame) is a hairline in --color-line with ink-muted labels; the ONE
- * saturated thing is the price line itself, in the accent green that
- * carries price everywhere else in the app.
+ * Past deals for this product, one point per flyer. Everything
+ * structural (grid, axes, tooltip frame) is a hairline in --color-line
+ * with ink-muted labels; the ONE saturated thing is the price line
+ * itself, in the accent green that carries price everywhere else.
  */
-export default function PriceChart({ history }: { history: HistoryPoint[] }) {
+export default function PriceChart({ history, store }: { history: HistoryPoint[]; store: string }) {
   if (history.length < 2) {
     return (
       <div className="card-soft px-4 py-5">
-        <p className="text-ink-soft text-[13px]">
-          Not enough scrapes yet to chart a trend — check back after a few more nights of scraping.
-        </p>
+        <p className="text-ink-soft text-[13px]">No earlier deals for this product at {store} yet.</p>
       </div>
     );
   }
 
   const data = history.map((point) => ({
-    date: new Date(point.scraped_at).toLocaleDateString("en-CA", { month: "short", day: "numeric" }),
+    date: shortDate(point.valid_from),
+    window: `${shortDate(point.valid_from)} – ${shortDate(point.valid_to)}`,
     price: point.price,
   }));
 
@@ -46,6 +51,8 @@ export default function PriceChart({ history }: { history: HistoryPoint[] }) {
           />
           <Tooltip
             formatter={(value) => [`$${Number(value).toFixed(2)}`, "Price"]}
+            // The flyer's whole window, not just the day it started.
+            labelFormatter={(_, payload) => payload?.[0]?.payload?.window ?? ""}
             cursor={{ stroke: "var(--color-line-strong)", strokeWidth: 1 }}
             contentStyle={{
               background: "var(--color-surface)",
@@ -58,7 +65,9 @@ export default function PriceChart({ history }: { history: HistoryPoint[] }) {
             itemStyle={{ color: "var(--color-ink)" }}
           />
           <Line
-            type="step"
+            // Smooth, not stepped: `monotone` curves between points without
+            // overshooting them, so a dip never draws below its real low.
+            type="monotone"
             dataKey="price"
             stroke="var(--color-accent)"
             strokeWidth={2}

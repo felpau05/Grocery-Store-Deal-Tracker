@@ -48,11 +48,6 @@ function PickerDialog({ panelRef }: { panelRef: RefObject<HTMLDivElement | null>
           <h2 id="trip-picker-title" className="font-display text-[17px] text-ink leading-snug">
             {verb} <span className="capitalize">&ldquo;{picker.name}&rdquo;</span> to…
           </h2>
-          {picker.mode === "add" && (
-            <p className="text-[13px] text-ink-soft mt-1">
-              We&apos;ll keep adding to this shopping trip until you change it.
-            </p>
-          )}
         </div>
 
         <ul className="max-h-[50vh] overflow-y-auto border-t border-line divide-y divide-line">

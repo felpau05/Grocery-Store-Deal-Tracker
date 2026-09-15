@@ -141,24 +141,12 @@ export default function CategoryBrowser({
     .sort((a, b) => shelfRank(a.name) - shelfRank(b.name) || (b.count ?? 0) - (a.count ?? 0));
 
   return (
-    <section aria-label="Browse by category">
-      <div className="flex items-end justify-between gap-4 flex-wrap mb-5">
-        <div>
-          <h2 className="font-display text-[22px] text-ink leading-tight">Browse by category</h2>
-          <p className="text-[13px] text-ink-soft mt-1">
-            Pick a shelf to see what&apos;s on sale there.
-          </p>
-        </div>
-        {/* The escape hatch. Browsing everything is still one click away
-            — the category grid is the default, not a gate. */}
-        <button
-          onClick={onSeeEverything}
-          className="btn-soft-quiet px-4 py-2 text-sm font-semibold whitespace-nowrap"
-        >
-          {total !== null ? `Or see all ${total.toLocaleString()} deals` : "Or see everything"}
-        </button>
-      </div>
-
+    // The whole section is the scroll area on sidebar layouts — there is
+    // no heading to pin any more, so nothing sits above the tiles.
+    <section
+      aria-label="Browse by category"
+      className="sidebar:flex-1 sidebar:min-h-0 sidebar:overflow-y-auto sidebar:pb-16 sidebar:pr-1"
+    >
       {loading && tiles.length === 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-4">
           {Array.from({ length: 8 }).map((_, i) => (
@@ -171,8 +159,34 @@ export default function CategoryBrowser({
         </p>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-4">
+          {/* The escape hatch, as the first tile. Browsing everything is
+              still one click away — the category grid is the default, not
+              a gate. Accent-tinted so it doesn't read as just another shelf. */}
+          <div className="animate-in">
+            <GlassCard
+              as="button"
+              interactive
+              onClick={onSeeEverything}
+              surfaceClassName="relative overflow-hidden rounded-card bg-accent-soft border border-accent/30 w-full h-full px-4 py-5 text-left hover:border-accent transition-colors"
+            >
+              <span aria-hidden className="block text-[26px] leading-none">
+                🛍️
+              </span>
+              <span className="block mt-3 text-[15px] font-semibold text-ink">All</span>
+              <span className="block mt-1 text-[13px] text-ink-muted">
+                {total !== null ? (
+                  <>
+                    <span className="font-mono">{total.toLocaleString()}</span> deal
+                    {total === 1 ? "" : "s"}
+                  </>
+                ) : (
+                  "See everything"
+                )}
+              </span>
+            </GlassCard>
+          </div>
           {tiles.map(({ name, count }, i) => (
-            <div key={name} className="animate-in" style={{ animationDelay: `${i * 25}ms` }}>
+            <div key={name} className="animate-in" style={{ animationDelay: `${(i + 1) * 25}ms` }}>
               <GlassCard
                 as="button"
                 interactive

@@ -46,8 +46,16 @@ function urgentExpiry(validTo: string): string | null {
  */
 export default function DealCard({
   deal,
+  fillAtWide = false,
 }: {
   deal: Deal;
+  /**
+   * At `wide:`, fill the height the parent gives instead of sizing to
+   * the 4:3 image: the image well takes whatever is left after the
+   * text. For a strip that has to fit a fixed-height screen (the home
+   * hub) — a short laptop gets a shorter photo rather than a scrollbar.
+   */
+  fillAtWide?: boolean;
   /**
    * NOT RENDERED, and that is deliberate — do not go looking for the
    * bug. Its only consumer was the hover "deal-o-meter" (this price vs
@@ -74,9 +82,14 @@ export default function DealCard({
       as={Link}
       href={`/item/${deal.item_id}`}
       interactive
-      surfaceClassName={`group block ${GLASS_SURFACE_DENSE}`}
+      wrapperClassName={fillAtWide ? "wide:h-full" : ""}
+      surfaceClassName={`group block ${GLASS_SURFACE_DENSE} ${fillAtWide ? "wide:h-full wide:flex wide:flex-col" : ""}`}
     >
-      <div className="relative aspect-[4/3] bg-surface-2">
+      <div
+        className={`relative aspect-[4/3] bg-surface-2 ${
+          fillAtWide ? "wide:aspect-auto wide:flex-1 wide:min-h-12" : ""
+        }`}
+      >
         {/* Sits UNDER the image rather than replacing it, so the same
             markup covers both "no product_image" and "the URL 404'd"
             (the onError below just hides the img and uncovers this).
@@ -117,7 +130,7 @@ export default function DealCard({
         )}
       </div>
 
-      <div className="p-4">
+      <div className={`p-4 ${fillAtWide ? "wide:shrink-0" : ""}`}>
         {/* The most legible element on the card, by design. */}
         <h3 className="font-display line-clamp-2 text-[15px] leading-snug text-ink transition-colors group-hover:text-accent">
           <span className={FIELD_LABEL}>Name:</span>

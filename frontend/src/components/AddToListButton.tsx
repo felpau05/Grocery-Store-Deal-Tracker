@@ -24,6 +24,22 @@ function CheckGlyph({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
+function PlusGlyph({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.75"
+      strokeLinecap="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
 /**
  * Toggles an item on the active trip's grocery list. `source` records
  * which deal it came from (store, price at add time, image) so the cart
@@ -41,8 +57,8 @@ function CheckGlyph({ className = "w-4 h-4" }: { className?: string }) {
  * on the list that's state worth seeing, so that one stays solid.
  *
  * It still goes through `toggleChip()` — the helper's base is a
- * hairline + `rounded-pill` + a transition now, which at 32×32 is
- * exactly the circular icon affordance this wants, so there's nothing
+ * hairline + `rounded-pill` + a transition now, which at 32px tall is
+ * exactly the "+ cart" pill this wants, so there's nothing
  * to fight and no reason to hand-roll a fifth copy of the shape.
  */
 export default function AddToListButton({
@@ -92,13 +108,16 @@ export default function AddToListButton({
         // ever touch colour. Both variants have the same specificity, so
         // having them fight over the same property would leave which one
         // wins up to Tailwind's variant ordering.
-        className={`inline-flex h-8 w-8 shrink-0 items-center justify-center active:translate-y-px ${toggleChip(
+        className={`inline-flex h-8 shrink-0 items-center justify-center gap-0.5 px-2.5 active:translate-y-px ${toggleChip(
           inList,
           "border-accent bg-accent text-white hover:bg-accent-dark hover:border-accent-dark",
           "border-line bg-surface text-ink-soft opacity-75 group-hover:opacity-100 focus-visible:opacity-100 hover:border-accent hover:bg-accent hover:text-white",
         )}`}
       >
-        {inList ? <CheckGlyph className="h-4 w-4" /> : <CartGlyph className="h-4 w-4" />}
+        {/* "+ cart" to add, "✓ cart" once added — the same width either
+            way, so toggling never shifts the card's price row. */}
+        {inList ? <CheckGlyph className="h-3.5 w-3.5" /> : <PlusGlyph className="h-3.5 w-3.5" />}
+        <CartGlyph className="h-4 w-4" />
       </button>
     );
   }
@@ -120,8 +139,12 @@ export default function AddToListButton({
           : "bg-accent text-white hover:bg-accent-dark"
       }`}
     >
-      {inList ? <CheckGlyph className="h-4 w-4" /> : <CartGlyph className="h-4 w-4" />}
       {inList ? "On your list" : "Add to grocery list"}
+      {/* The same "+ cart" / "✓ cart" mark as the deal cards' button. */}
+      <span className="inline-flex items-center gap-0.5" aria-hidden>
+        {inList ? <CheckGlyph className="h-3.5 w-3.5" /> : <PlusGlyph className="h-3.5 w-3.5" />}
+        <CartGlyph className="h-4 w-4" />
+      </span>
     </button>
   );
 }

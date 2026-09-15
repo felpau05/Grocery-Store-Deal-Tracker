@@ -40,9 +40,12 @@ export type Deal = {
   merchant_name: string;
 };
 
+/** One past flyer deal for the same product (same store, name and
+ *  size) — see backend db.get_product_history. Dates are YYYY-MM-DD. */
 export type HistoryPoint = {
   price: number;
-  scraped_at: string;
+  valid_from: string;
+  valid_to: string;
 };
 
 export type DealHistory = {
@@ -81,6 +84,8 @@ export type PlanItem = {
    *  rather than null — the full shopping-list view falls back to its
    *  placeholder either way. */
   product_image?: string | null;
+  size?: number | null;
+  size_unit?: string | null;
 };
 
 export type StorePlan = {
@@ -326,6 +331,22 @@ export function fetchDeals(
   search.set("limit", String(params.limit ?? 24));
   search.set("offset", String(params.offset ?? 0));
   return getJson<Deal[]>(`/deals?${search.toString()}`);
+}
+
+/** A deal from GET /deals/best. `drop_pct` (0-1) is how far below its
+ *  own average over recent flyer weeks it is; null for the random fill
+ *  used when not enough deals have a comparable past price. */
+export type BestDeal = Deal & { ref_price: number | null; drop_pct: number | null };
+
+export function fetchBestDeals(
+  params: { categories?: string[]; limit?: number } & ScopeParams,
+): Promise<BestDeal[]> {
+  const search = new URLSearchParams();
+  (params.categories ?? []).forEach((c) => search.append("categories", c));
+  (params.merchantIds ?? []).forEach((m) => search.append("merchant_ids", String(m)));
+  if (params.postalCode) search.set("postal_code", params.postalCode);
+  search.set("limit", String(params.limit ?? 24));
+  return getJson<BestDeal[]>(`/deals/best?${search.toString()}`);
 }
 
 export type DealFacets = {

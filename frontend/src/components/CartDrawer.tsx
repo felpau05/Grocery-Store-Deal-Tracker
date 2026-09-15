@@ -38,7 +38,7 @@ function EntryRow({ entry }: { entry: CartEntry }) {
   };
 
   return (
-    <li className="flex items-center gap-3 px-5 py-2.5 hover:bg-surface-2 transition-colors">
+    <li className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-2 transition-colors">
       {entry.source?.image ? (
         <img
           src={entry.source.image}
@@ -192,7 +192,7 @@ function TripSwitcher() {
                 </button>
                 {trips.length > 0 && (
                   <Link
-                    href="/list?view=trips"
+                    href="/list"
                     onClick={closeDrawer}
                     className="text-[13px] font-semibold text-ink-soft hover:text-accent transition-colors"
                   >
@@ -224,12 +224,14 @@ export default function CartDrawer() {
   // Focus trap + Esc + scroll lock while open; restore focus on close.
   useDialogFocus(panelRef, isDrawerOpen, closeDrawer);
 
-  // Rough total from entries that carry a known deal price.
-  const estimate = useMemo(() => {
-    const priced = entries.filter((e) => e.source);
-    const total = priced.reduce((sum, e) => sum + (e.source?.price ?? 0), 0);
-    return { total: Math.round(total * 100) / 100, priced: priced.length };
-  }, [entries]);
+  // The trip's own planned total — the same number the trip page shows —
+  // and only while its receipts still cover every item on the list.
+  const pricedTotal = useMemo(() => {
+    if (!activeTrip || activeTrip.items.length === 0) return null;
+    const planned = new Set(activeTrip.plans.flatMap((p) => p.items.map((i) => i.query)));
+    const covered = activeTrip.items.length === planned.size && activeTrip.items.every((i) => planned.has(i.query));
+    return covered ? activeTrip.totalCost : null;
+  }, [activeTrip]);
 
   const onClearAll = () => {
     const removed = clear();
@@ -262,10 +264,10 @@ export default function CartDrawer() {
         aria-modal="true"
         aria-label="Your grocery list"
         tabIndex={-1}
-        className="animate-drawer absolute right-0 top-0 h-full w-full max-w-md bg-surface rounded-l-card shadow-soft-lg flex flex-col outline-none overflow-hidden"
+        className="animate-drawer absolute right-0 top-0 h-full w-full max-w-md bg-surface-3 rounded-l-card shadow-soft-lg flex flex-col outline-none overflow-hidden"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 h-14 shrink-0 border-b border-line">
+        <div className="flex items-center justify-between px-5 h-14 shrink-0 bg-surface border-b border-line">
           <div className="flex items-center gap-2.5 min-w-0">
             <CartGlyph className="w-5 h-5 text-accent shrink-0" />
             <TripSwitcher />
@@ -284,95 +286,91 @@ export default function CartDrawer() {
           </button>
         </div>
 
-        {/* Items (scrolls independently) */}
-        {entries.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
-            <span className="text-4xl mb-3" aria-hidden>🧾</span>
-            <p className="font-display text-ink">Your list is empty</p>
-            <p className="text-ink-soft text-sm mt-1 mb-5">
-              Hit the <CartGlyph className="w-3.5 h-3.5 inline align-[-2px]" /> button on any
-              deal, or quick-add a staple:
-            </p>
-            <div className="flex flex-wrap justify-center gap-1.5">
-              {SEEDS.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => add(s)}
-                  className="text-[12px] font-medium px-2.5 py-1 rounded-pill border border-line bg-surface text-ink-soft hover:border-line-strong hover:text-ink transition-colors capitalize"
-                >
-                  + {s}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <ul className="flex-1 overflow-y-auto py-1 divide-y divide-line">
-            {entries.map((entry) => (
-              <EntryRow key={entry.id} entry={entry} />
-            ))}
-          </ul>
-        )}
+        {/* Body — a tinted well holding white cards, so the add box, the
+            list and the footer read as separate things rather than one
+            white sheet. Scrolls independently of header and footer. */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (draft.trim()) {
+                add(draft);
+                setDraft("");
+              }
+            }}
+            className="flex gap-2 p-3 rounded-card bg-surface border border-line shadow-soft"
+          >
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="Add an item, e.g. eggs"
+              aria-label="Quick add an item"
+              /* min-w-0: a text input's default intrinsic width (~20ch)
+                 ignores flex-shrink unless this is set — without it, on a
+                 narrow drawer it refused to shrink and pushed the Add
+                 button past the right edge. */
+              className="flex-1 min-w-0 rounded-control bg-surface border border-line px-3 py-2 text-sm text-ink placeholder:text-ink-muted focus:border-accent focus:outline-none transition-colors"
+            />
+            <button type="submit" className={BTN_CART_ADD}>
+              Add
+            </button>
+          </form>
 
-        {/* Quick add */}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (draft.trim()) {
-              add(draft);
-              setDraft("");
-            }
-          }}
-          className="flex gap-2 px-5 py-3 border-t border-line shrink-0"
-        >
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="Quick add — e.g. eggs"
-            aria-label="Quick add an item"
-            /* min-w-0: a text input's default intrinsic width (~20ch)
-               ignores flex-shrink unless this is set — every other input
-               in this codebase already has it, this one was the one
-               outlier, and on a narrow drawer it refused to shrink and
-               pushed the Add button (and the whole panel's content)
-               past the right edge. */
-            className="flex-1 min-w-0 rounded-control bg-surface border border-line px-3 py-2 text-sm text-ink placeholder:text-ink-muted focus:border-line-strong transition-colors"
-          />
-          <button type="submit" className={BTN_CART_ADD}>
-            Add
-          </button>
-        </form>
+          <section className="rounded-card bg-surface border border-line shadow-soft overflow-hidden" aria-label="Items">
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-line">
+              <h2 className={PANEL_LABEL}>
+                Your list
+                {entries.length > 0 && (
+                  <span className="ml-1.5 font-mono tabular-nums text-ink-muted font-normal">{entries.length}</span>
+                )}
+              </h2>
+              {entries.length > 0 && (
+                <button
+                  onClick={onClearAll}
+                  className="text-[12px] font-medium text-ink-muted hover:text-danger transition-colors shrink-0"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
+
+            {entries.length === 0 ? (
+              <div className="flex flex-col items-center text-center px-6 py-8">
+                <span className="text-3xl mb-2" aria-hidden>🧾</span>
+                <p className="text-sm text-ink-soft mb-4">Nothing on this list yet</p>
+                <div className="flex flex-wrap justify-center gap-1.5">
+                  {SEEDS.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => add(s)}
+                      className="text-[12px] font-medium px-2.5 py-1 rounded-pill border border-line bg-surface text-ink-soft hover:border-line-strong hover:text-ink transition-colors capitalize"
+                    >
+                      + {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <ul className="divide-y divide-line">
+                {entries.map((entry) => (
+                  <EntryRow key={entry.id} entry={entry} />
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
 
         {/* Footer */}
-        <div className="px-5 pb-5 pt-3 border-t border-line bg-surface-2 shrink-0">
-          <div className="flex items-baseline justify-between gap-3 mb-3">
-            {estimate.priced > 0 ? (
-              <span className="text-[12px] text-ink-soft">
-                ~
-                <span className="font-mono tabular-nums text-ink font-semibold text-base">
-                  ${estimate.total.toFixed(2)}
-                </span>{" "}
-                from {estimate.priced} priced {estimate.priced === 1 ? "item" : "items"}
-              </span>
-            ) : (
-              <span className="text-[12px] text-ink-muted">Plan a shopping trip to price your list</span>
-            )}
-            {entries.length > 0 && (
-              <button
-                onClick={onClearAll}
-                className="text-[12px] font-medium text-ink-muted hover:text-danger transition-colors shrink-0"
-              >
-                Clear all
-              </button>
-            )}
-          </div>
-          {/* Straight into THIS trip on the planner, built: `?build=1`
-              because the button says "Plan my trip", so it has to
-              actually plan one rather than land on the start screen and
-              ask again (see list/page.tsx). Plain /list, with the New
-              trip / My trips choice, is what the header's "Plan a trip"
-              tab gives you. */}
+        <div className="px-5 pb-5 pt-4 border-t border-line bg-surface shrink-0">
+          {pricedTotal !== null && (
+            <div className="flex items-baseline justify-between gap-3 mb-3">
+              <span className="text-[13px] font-semibold text-ink-soft">Estimated total</span>
+              <span className="font-display text-2xl text-accent tabular-nums leading-none">${pricedTotal.toFixed(2)}</span>
+            </div>
+          )}
+          {/* Straight into THIS trip on the planner, which prices itself. */}
           <Link
-            href={activeTrip ? `/list?trip=${encodeURIComponent(activeTrip.id)}&build=1` : "/list"}
+            href={activeTrip ? `/list?trip=${encodeURIComponent(activeTrip.id)}` : "/list"}
             onClick={closeDrawer}
             aria-disabled={entries.length === 0}
             className={`btn-brut-ink block text-center font-display text-[15px] py-3 rounded-control transition-colors ${
@@ -381,7 +379,7 @@ export default function CartDrawer() {
                 : "bg-accent text-white hover:bg-accent-dark"
             }`}
           >
-            Plan my shopping trip →
+            Open shopping trip →
           </Link>
         </div>
       </div>

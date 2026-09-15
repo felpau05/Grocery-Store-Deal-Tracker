@@ -230,8 +230,13 @@ export default function SettingsPage() {
   }
 
   return (
-    <main className="max-w-[1400px] mx-auto px-6 py-10">
-      <h1 className="font-display text-3xl text-ink mb-6">Account</h1>
+    // At `wide:` one fixed screen under the header, like /deals and the
+    // trip pages: the store list is the only thing that scrolls, so the
+    // save bar under it is always on screen. It used to sit below a
+    // 70vh scroll box plus everything above it — past the fold, reachable
+    // only by scrolling the page rather than the list.
+    <main className="max-w-[1400px] mx-auto px-6 py-10 wide:py-6 wide:h-[calc(100svh-var(--header-h))] wide:flex wide:flex-col wide:overflow-hidden">
+      <h1 className="font-display text-3xl text-ink mb-6 wide:mb-5 shrink-0">Account</h1>
 
       {/* Who you are and where you are on the left — two short cards you
           set once — and the store picker on the right, which is a list
@@ -239,8 +244,8 @@ export default function SettingsPage() {
           was stacked under them in a 768px column, so the two settings
           you change least pushed the one you actually came for below
           the fold. */}
-      <div className="grid grid-cols-1 wide:grid-cols-[minmax(0,400px)_1fr] gap-8 items-start">
-      <div>
+      <div className="grid grid-cols-1 wide:grid-cols-[minmax(0,400px)_1fr] wide:grid-rows-[minmax(0,1fr)] gap-8 items-start wide:flex-1 wide:min-h-0">
+      <div className="wide:min-h-0 wide:max-h-full wide:overflow-y-auto">
       {/* ── Who you are ──────────────────────────────────────────── */}
       <GlassCard
         wrapperClassName="mb-5"
@@ -340,9 +345,9 @@ export default function SettingsPage() {
       </div>
 
       {/* ── Store picker ─────────────────────────────────────────── */}
-      <div className="min-w-0">
-      <GlassCard surfaceClassName={`${GLASS_SURFACE_DENSE} p-5`}>
-        <div className="flex items-baseline justify-between gap-3 flex-wrap">
+      <div className="min-w-0 wide:h-full wide:min-h-0">
+      <GlassCard wrapperClassName="wide:h-full" surfaceClassName={`${GLASS_SURFACE_DENSE} p-5 flex flex-col wide:h-full`}>
+        <div className="shrink-0 flex items-baseline justify-between gap-3 flex-wrap">
           <h2 className="font-display text-ink text-lg">Your stores</h2>
           {/* Plainly how many rows you're looking at out of how many there
               are. This used to append "· N with deal data", which named
@@ -356,7 +361,7 @@ export default function SettingsPage() {
             </span>
           )}
         </div>
-        <p className="text-[13px] text-ink-soft mt-1">
+        <p className="shrink-0 text-[13px] text-ink-soft mt-1">
           Select the stores you want to see deals for.
         </p>
 
@@ -370,7 +375,7 @@ export default function SettingsPage() {
             to still be on screen while they work through the list. */}
         {stores && !storesLoading && trackedCount === 0 && (
           <div
-            className={`mt-4 rounded-card border px-4 py-3 ${
+            className={`shrink-0 mt-4 rounded-card border px-4 py-3 ${
               stores.length === 0 ? "border-danger/25 bg-danger-soft" : "border-line bg-accent-soft"
             }`}
           >
@@ -401,15 +406,15 @@ export default function SettingsPage() {
         )}
 
         {!stores && !storesLoading && (
-          <p className="mt-4 rounded-control border border-line bg-surface-2 px-4 py-3 text-[13px] text-ink-soft">
+          <p className="shrink-0 mt-4 rounded-control border border-line bg-surface-2 px-4 py-3 text-[13px] text-ink-soft">
             Enter your postal code above and hit &quot;Find stores&quot; to see what&apos;s near
             you.
           </p>
         )}
 
         {stores && !storesLoading && (
-          <div className="mt-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+          <div className="mt-4 wide:flex-1 wide:min-h-0 wide:flex wide:flex-col">
+            <div className="shrink-0 flex items-center justify-between gap-3 flex-wrap mb-3">
               {/* Either/or, so it reads as one control with two states
                   rather than a lone button whose off-state you have to
                   infer. `groceryOnly` stays the underlying boolean — the
@@ -434,7 +439,7 @@ export default function SettingsPage() {
               />
             </div>
 
-            <ul className="grid sm:grid-cols-2 wide:grid-cols-3 gap-2 max-h-96 wide:max-h-[70vh] overflow-y-auto pr-1">
+            <ul className="grid sm:grid-cols-2 wide:grid-cols-3 content-start gap-2 max-h-96 wide:max-h-none wide:flex-1 wide:min-h-0 overflow-y-auto pr-1">
               {visibleStores.map((s) => {
                 const checked = selected.has(s.id);
                 return (
@@ -509,7 +514,7 @@ export default function SettingsPage() {
             as the always-available shortcut for people who didn't
             change anything. */}
         {savedCount !== null && (
-          <div className={`animate-in mt-5 ${NUDGE_BANNER_SURFACE}`}>
+          <div className={`animate-in shrink-0 mt-5 ${NUDGE_BANNER_SURFACE}`}>
             <div className="min-w-0">
               <p className="label-soft text-[13px] text-accent-dark">Saved</p>
               <p className="text-[13px] text-ink-soft mt-0.5">
@@ -549,7 +554,10 @@ export default function SettingsPage() {
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-3 flex-wrap mt-5 pt-4 border-t border-line">
+        {/* mt-auto pins the save bar to the card's bottom at `wide:` even
+            when there's no list above to fill the height. */}
+        <div className="shrink-0 mt-auto pt-5">
+        <div className="flex items-center justify-between gap-3 flex-wrap pt-4 border-t border-line">
           <span className="text-[13px] text-ink-soft">
             <span className="font-mono text-ink">{selected.size}</span>{" "}
             {selected.size === 1 ? "store" : "stores"} selected
@@ -569,6 +577,7 @@ export default function SettingsPage() {
               {saving ? "Saving…" : "Save my stores"}
             </GlassCard>
           </span>
+        </div>
         </div>
       </GlassCard>
       </div>

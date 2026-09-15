@@ -86,12 +86,12 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** Anonymous visitor — generic "Stores" heading, no "edit stores" link. */
+/** Anonymous visitor — generic "Stores" heading. */
 export const Anonymous: Story = {
   args: {},
 };
 
-/** Signed in — heading becomes "Your stores", edit-stores link appears. */
+/** Signed in — heading becomes "Your stores". */
 export const SignedIn: Story = {
   args: { signedIn: true },
 };

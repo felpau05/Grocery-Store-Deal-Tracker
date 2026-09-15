@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import GlassCard, { GLASS_SURFACE_DENSE } from "@/components/GlassCard";
 import { BTN_SECONDARY } from "@/lib/button";
@@ -15,15 +14,19 @@ import type {
 
 const STATUSES: { id: DealStatus; label: string }[] = [
   { id: "all", label: "All" },
-  { id: "active", label: "On now" },
-  { id: "upcoming", label: "Starting soon" },
+  { id: "active", label: "Active" },
+  { id: "upcoming", label: "Starting Soon" },
 ];
 
+/** Only deals whose last day falls inside the window, counted from
+ *  today — "Tomorrow" is deals ending today or tomorrow (the API's
+ *  expires_within_days is cumulative). Worded as "Deal ends …" because
+ *  "Expires: ≤ 2 days" read as a mystery. */
 const EXPIRY_OPTIONS: { days: number | null; label: string }[] = [
-  { days: null, label: "Any" },
+  { days: null, label: "Any time" },
   { days: 0, label: "Today" },
-  { days: 2, label: "≤ 2 days" },
-  { days: 7, label: "This week" },
+  { days: 1, label: "Tomorrow" },
+  { days: 7, label: "Within a week" },
 ];
 
 /** Separate cards, stacked with a gap.
@@ -309,7 +312,7 @@ export function Segmented<T extends string>({
 }
 
 const PRICE_INPUT =
-  "w-full min-w-0 rounded-control bg-surface border border-line px-2.5 py-1.5 font-mono tabular-nums text-[13px] text-ink placeholder:text-ink-muted focus:border-line-strong transition-colors";
+  "w-full min-w-0 rounded-control bg-surface border border-line pr-2.5 py-1.5 font-mono tabular-nums text-[13px] text-ink placeholder:text-ink-muted focus:border-line-strong transition-colors";
 
 const SORT_MODES: { id: SortMode; label: string }[] = [
   { id: "price", label: "Price" },
@@ -396,7 +399,7 @@ export default function DealsSidebar({
         </div>
 
         <div className="mb-4 last:mb-0">
-          <div className={`${GROUP_LABEL} mb-2`}>Expires</div>
+          <div className={`${GROUP_LABEL} mb-2`}>Deal ends</div>
           <div className="flex flex-wrap gap-1.5">
             {EXPIRY_OPTIONS.map((o) => (
               <OptionPill
@@ -413,29 +416,41 @@ export default function DealsSidebar({
         <div className="mb-4 last:mb-0">
           <div className={`${GROUP_LABEL} mb-2`}>Price range</div>
           <div className="flex items-center gap-2">
-            <input
-              type="number"
-              min="0"
-              step="0.5"
-              value={priceMin}
-              onChange={(e) => setPriceMin(e.target.value)}
-              placeholder="Min $"
-              aria-label="Minimum price"
-              className={PRICE_INPUT}
-            />
+            {/* The $ is part of the field, not the placeholder, so it
+                stays put once a number is typed. */}
+            <label className="relative flex-1 min-w-0">
+              <span aria-hidden className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 font-mono text-[13px] text-ink-muted">
+                $
+              </span>
+              <input
+                type="number"
+                min="0"
+                step="0.5"
+                value={priceMin}
+                onChange={(e) => setPriceMin(e.target.value)}
+                placeholder="Min"
+                aria-label="Minimum price"
+                className={`${PRICE_INPUT} pl-6`}
+              />
+            </label>
             <span aria-hidden className="text-ink-muted">
               –
             </span>
-            <input
-              type="number"
-              min="0"
-              step="0.5"
-              value={priceMax}
-              onChange={(e) => setPriceMax(e.target.value)}
-              placeholder="Max $"
-              aria-label="Maximum price"
-              className={PRICE_INPUT}
-            />
+            <label className="relative flex-1 min-w-0">
+              <span aria-hidden className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 font-mono text-[13px] text-ink-muted">
+                $
+              </span>
+              <input
+                type="number"
+                min="0"
+                step="0.5"
+                value={priceMax}
+                onChange={(e) => setPriceMax(e.target.value)}
+                placeholder="Max"
+                aria-label="Maximum price"
+                className={`${PRICE_INPUT} pl-6`}
+              />
+            </label>
           </div>
         </div>
 
@@ -508,16 +523,6 @@ export default function DealsSidebar({
               </CheckboxRow>
             ))}
           </div>
-          {user && (
-            <div className="flex justify-end mt-2">
-              <Link
-                href="/settings"
-                className="text-[12px] font-medium text-ink-muted hover:text-accent transition-colors"
-              >
-                Edit stores
-              </Link>
-            </div>
-          )}
         </Section>
       )}
     </div>

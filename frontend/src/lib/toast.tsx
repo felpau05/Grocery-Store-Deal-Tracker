@@ -95,12 +95,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div
         aria-live="polite"
-        className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 pointer-events-none px-4"
+        className="fixed top-[calc(var(--header-h,58px)+8px)] sm:top-auto sm:bottom-5 left-1/2 -translate-x-1/2 z-50 w-full sm:w-auto flex flex-col items-center gap-2 pointer-events-none px-4"
       >
-        {toasts.map((t) => (
+        {toasts.map((t, i) => (
           <div
             key={t.id}
-            className="animate-toast pointer-events-auto flex items-stretch overflow-hidden rounded-control border border-line bg-surface shadow-soft-lg max-w-[92vw]"
+            // A phone shows only the newest — stacked, they covered the page.
+            className={`${i < toasts.length - 1 ? "hidden sm:flex" : "flex"} animate-toast pointer-events-auto items-stretch overflow-hidden rounded-control border border-line bg-surface shadow-soft-lg max-w-[92vw]`}
           >
             {/* The kind indicator: a rule down the leading edge rather
                 than a tinted fill, so the card stays white and the text
@@ -110,7 +111,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               className={`w-[3px] shrink-0 ${t.kind === "error" ? "bg-danger" : "bg-accent"}`}
             />
             <div className="flex items-center gap-3 pl-3.5 pr-2 py-2 min-w-0">
-              <span className="text-sm text-ink truncate">{t.message}</span>
+              <span className="text-sm text-ink sm:truncate">{t.message}</span>
               {t.actions.map((action) => (
                 <button
                   key={action.label}

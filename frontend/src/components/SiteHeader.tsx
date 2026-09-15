@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAccount } from "@/lib/account";
 import { CHIP, CHIP_ACTIVE, CHIP_LOOK, CHIP_QUIET } from "@/lib/chip";
-import { useCart } from "@/lib/trips";
+import { tripName, useCart, useTrips } from "@/lib/trips";
 import CartGlyph from "./CartGlyph";
 import HeaderLiquid from "./HeaderLiquid";
 
@@ -15,7 +15,7 @@ import HeaderLiquid from "./HeaderLiquid";
    2,000-item grid. The melon logo to the left is the way back to "/". */
 const TABS = [
   { href: "/deals", label: "Deals" },
-  { href: "/list", label: "Plan a shopping trip" },
+  { href: "/list", label: "Shopping trips" },
 ];
 
 // Routes that open on a full-bleed hero the header floats over — just
@@ -34,6 +34,8 @@ const HERO_REVEAL_PX = 24;
 export default function SiteHeader() {
   const pathname = usePathname();
   const { count, openDrawer } = useCart();
+  const { activeTrip } = useTrips();
+  const cartTripName = activeTrip ? tripName(activeTrip) : null;
   const { user, meta, scrapeStatus } = useAccount();
   const hasHero = HERO_ROUTES.includes(pathname);
 
@@ -115,7 +117,7 @@ export default function SiteHeader() {
   // Anything that changes how wide the chips want to be invalidates the
   // measurement. Re-measuring is one off-layout pass, so it is cheap to
   // be liberal here — a stale `fit` is a wrapped header.
-  const fitSignature = `${user?.name ?? ""}|${activePostal ?? ""}|${scrapeStatus?.running ?? false}|${pathname}`;
+  const fitSignature = `${user?.name ?? ""}|${activePostal ?? ""}|${scrapeStatus?.running ?? false}|${pathname}|${cartTripName ?? ""}`;
   useLayoutEffect(() => setFit(null), [fitSignature]);
 
   useLayoutEffect(() => {
@@ -469,7 +471,7 @@ export default function SiteHeader() {
         <button
           ref={cartRef}
           onClick={openDrawer}
-          aria-label={`Open grocery list, ${count} ${count === 1 ? "item" : "items"}`}
+          aria-label={`Open ${cartTripName ?? "grocery list"}, ${count} ${count === 1 ? "item" : "items"}`}
           /* CHIP_LOOK, not CHIP: CHIP already bakes in its own px/py,
              and stacking a second padding utility (p-2) on top of it
              is exactly the trap CHIP_LOOK's own definition warns
@@ -478,9 +480,14 @@ export default function SiteHeader() {
              taller than its siblings rather than sized the same.
              CHIP_LOOK carries everything else (border, blur, press)
              without the sizing, so this owns its padding outright. */
-          className={`${CHIP_LOOK} relative shrink-0 mr-4 sm:mr-6 p-1.5 sm:p-2 ${chipQuiet}`}
+          className={`${CHIP_LOOK} relative shrink-0 mr-4 sm:mr-6 p-1.5 sm:p-2 inline-flex items-center gap-2 ${chipQuiet}`}
         >
           <CartGlyph className="w-5 h-5" />
+          {cartTripName && (
+            <span className="hidden sm:inline max-w-[160px] truncate font-mono text-[11px] font-bold uppercase tracking-wide pr-1">
+              {cartTripName}
+            </span>
+          )}
           {count > 0 && (
             <span
               className={`absolute -top-2.5 -right-2.5 inline-flex items-center justify-center min-w-[20px] h-[20px] px-1 rounded-full bg-sale text-paper border-2 border-ink font-mono text-[10px] font-bold ${

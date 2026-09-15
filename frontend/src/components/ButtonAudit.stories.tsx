@@ -296,11 +296,6 @@ export const E_TextLink: Story = {
           ← Back to deals
         </button>
       </Item>
-      <Item id="E2" caption="DealsSidebar “edit stores” (no uppercase/tracking)">
-        <button className="text-[12px] font-mono font-bold text-ink-soft hover:text-sale transition-colors">
-          ✎ edit stores
-        </button>
-      </Item>
       <Item id="E3" caption="settings “View my deals” (no tracking)">
         <button className="font-mono font-bold text-[12px] uppercase text-ink-soft hover:text-sale transition-colors">
           View my deals →

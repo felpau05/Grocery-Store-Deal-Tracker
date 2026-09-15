@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  fetchBestDeals,
   fetchDealFacets,
-  fetchDeals,
   fetchMerchants,
-  type Deal,
+  type BestDeal,
   type Merchant,
 } from "@/lib/api";
 import ActionCard from "@/components/ActionCard";
@@ -66,7 +66,7 @@ export default function HomeHub() {
   const { user, merchantIds, meta, scrapeStatus, loading: sessionLoading } = useAccount();
 
   const [total, setTotal] = useState<number | null>(null);
-  const [deals, setDeals] = useState<Deal[]>([]);
+  const [deals, setDeals] = useState<BestDeal[]>([]);
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -120,17 +120,18 @@ export default function HomeHub() {
 
     Promise.all([
       fetchDealFacets(scope),
-      // Cheapest first, but only from the fresh shelves: across the whole
-      // catalogue "cheapest" meant stationery and candles. Over-fetched
-      // so the name dedupe below still has six left — flyers routinely
-      // list the same product twice (one per size, or one per store).
-      fetchDeals({
-        ...scope,
+      // Biggest drop against the product's own average over the last
+      // 12 flyer weeks first, then random fill (see backend
+      // db.best_deals) — most products don't recur within the window.
+      // Fresh shelves only: across the whole catalogue it was pop and
+      // energy drinks. Over-fetched so the name dedupe below still has
+      // six left — flyers routinely list the same product twice (one
+      // per size, or one per store).
+      fetchBestDeals({
+        merchantIds: scope.merchantIds,
+        postalCode: scope.postalCode,
         categories: FRESH_CATEGORIES,
-        sort: "price",
-        sortDir: "asc",
         limit: BEST_COUNT * 4,
-        offset: 0,
       }),
     ])
       .then(([facets, best]) => {
@@ -195,8 +196,18 @@ export default function HomeHub() {
     // the header, which is invisible.
     // min-h-screen gives useHeroSnap a real floor to scroll into — same
     // reason /list's #plan has one.
-    <section id="deals" className="min-h-screen scroll-mt-14 sm:scroll-mt-16 px-6 pt-12 pb-4">
-      <div className="max-w-[1400px] mx-auto">
+    //
+    // At `wide:` it is EXACTLY one screen under the header, so the page
+    // ends where this section does: one scroll off the melon lands here
+    // and there's nothing further down. Nothing scrolls inside it either:
+    // on a short laptop the deal photos shrink to the space that's left
+    // (DealCard's fillAtWide). Phones keep the natural height and an
+    // ordinary scroll.
+    <section
+      id="deals"
+      className="min-h-screen scroll-mt-14 sm:scroll-mt-16 px-6 pt-12 pb-4 wide:min-h-0 wide:h-[calc(100svh-var(--header-h))] wide:overflow-hidden wide:pt-6 wide:pb-5 wide:[@media(max-height:820px)]:pt-4 wide:[@media(max-height:820px)]:pb-4"
+    >
+      <div className="max-w-[1400px] mx-auto wide:h-full wide:flex wide:flex-col">
         {/* ── Account nudges ─────────────────────────────────────── */}
         {!sessionLoading && isSignedInNoPostal && (
           <GlassCard wrapperClassName="mb-6" surfaceClassName={NUDGE_BANNER_SURFACE}>
@@ -243,7 +254,7 @@ export default function HomeHub() {
         )}
 
         {/* ── Context line ───────────────────────────────────────── */}
-        <header className="mb-8">
+        <header className="mb-8 wide:mb-5 wide:[@media(max-height:820px)]:mb-4 shrink-0">
           <h2 className="font-display text-[clamp(1.6rem,3.2vw,2.4rem)] text-ink leading-tight">
             What would you like to do?
           </h2>
@@ -259,11 +270,12 @@ export default function HomeHub() {
             since it's the one thing worth checking before the other two
             mean anything — "browse deals" against no stores is just the
             example area. */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 wide:grid-cols-4 gap-5">
+        <div className="shrink-0 grid grid-cols-1 sm:grid-cols-2 wide:grid-cols-4 gap-5">
           <ActionCard
             href={user ? "/settings" : "/login"}
             icon="⚙️"
             title="Manage account"
+            compactWhenShort
             wrapperClassName="sm:col-span-2"
             detail={
               user
@@ -277,26 +289,30 @@ export default function HomeHub() {
             href="/deals"
             icon="🛒"
             title="Browse deals"
+            compactWhenShort
             detail="Every deal near you, grouped by category so you can pick a shelf first."
           />
           <ActionCard
             href="/list"
             icon="🧾"
             title="Plan a shopping trip"
+            compactWhenShort
             detail="Make a shopping list and we'll work out the cheapest way to buy it."
           />
         </div>
 
         {/* ── This week's best ───────────────────────────────────── */}
         {!isSignedInBlocked && (
-          <section className="mt-14" aria-label="This week's best deals">
-            <div className="flex items-end justify-between gap-4 flex-wrap mb-5">
+          <section className="mt-14 wide:mt-6 wide:[@media(max-height:820px)]:mt-4 wide:flex-1 wide:min-h-0 wide:flex wide:flex-col" aria-label="This week's best deals">
+            <div className="shrink-0 flex items-end justify-between gap-4 flex-wrap mb-5 wide:mb-4">
               <div>
                 <h3 className="font-display text-[22px] text-ink leading-tight">
                   This week&apos;s best
                 </h3>
                 <p className="text-[13px] text-ink-soft mt-1">
-                  The cheapest fresh food on sale right now.
+                  {deals.some((d) => d.drop_pct !== null)
+                    ? "Fresh food priced furthest below its usual flyer price."
+                    : "A few fresh deals on sale right now."}
                 </p>
               </div>
               <Link
@@ -318,7 +334,7 @@ export default function HomeHub() {
                 </button>
               </div>
             ) : loading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 wide:grid-cols-6 wide:grid-rows-[minmax(0,1fr)] wide:flex-1 wide:min-h-0 wide:max-h-[340px] gap-5 wide:gap-4">
                 {Array.from({ length: 3 }).map((_, i) => (
                   <SkeletonCard key={i} delay={i * 100} />
                 ))}
@@ -328,10 +344,10 @@ export default function HomeHub() {
                 Nothing on sale in your stores right now.
               </p>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 wide:grid-cols-6 wide:grid-rows-[minmax(0,1fr)] wide:flex-1 wide:min-h-0 wide:max-h-[340px] gap-5 wide:gap-4">
                 {deals.map((deal, i) => (
-                  <div key={deal.item_id} className="animate-in" style={{ animationDelay: `${i * 35}ms` }}>
-                    <DealCard deal={deal} />
+                  <div key={deal.item_id} className="animate-in wide:min-h-0" style={{ animationDelay: `${i * 35}ms` }}>
+                    <DealCard deal={deal} fillAtWide />
                   </div>
                 ))}
               </div>

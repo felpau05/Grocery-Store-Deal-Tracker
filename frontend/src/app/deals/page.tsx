@@ -24,19 +24,6 @@ import { BTN_FOLLOWUP_CTA, BTN_NUDGE_CTA } from "@/lib/button";
 import { CHIP_ACTIVE_LIGHT, CHIP_DISABLED_LIGHT, CHIP_QUIET_LIGHT, CHIP_SOFT } from "@/lib/chip";
 import { useKonamiCode } from "@/lib/hooks";
 
-const STATUSES: { id: DealStatus; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "active", label: "On now" },
-  { id: "upcoming", label: "Starting soon" },
-];
-
-const EXPIRY_OPTIONS: { days: number | null; label: string }[] = [
-  { days: null, label: "Any" },
-  { days: 0, label: "Today" },
-  { days: 2, label: "≤ 2 days" },
-  { days: 7, label: "This week" },
-];
-
 const PAGE_SIZE = 24;
 
 const PAGE_WINDOW = 2; // pages shown on either side of the current one
@@ -757,49 +744,46 @@ function DealsInner() {
 
         <div className="rule-soft my-5" />
 
-        {/* Where you are inside the category-first browse, and the way
-            back out of it. This is also the clear affordance: one click
-            returns to the shelves rather than making anyone hunt for the
-            checkbox they ticked in the rail. */}
+        {/* One line: where you are inside the category-first browse (and
+            the way back out of it — one click returns to the shelves
+            rather than making anyone hunt for the checkbox they ticked in
+            the rail), the result count, and the page indicator. Not
+            rendered on the tiles view, where CategoryBrowser's own "All"
+            tile already carries the same number. */}
         {!showTiles && (
-          <nav aria-label="Breadcrumb" className="flex items-center gap-2 flex-wrap mb-4 text-[13px]">
-            <button
-              onClick={backToCategories}
-              className="font-semibold text-accent hover:text-accent-dark transition-colors"
-            >
-              ← All categories
-            </button>
-            <span aria-hidden className="text-ink-muted">/</span>
-            <span className="text-ink-soft">{browseLabel}</span>
-          </nav>
-        )}
-
-        {/* Result count + page indicator. Everything else that used to
-            live on this row is now in the sidebar. Hidden on the tiles
-            view, where CategoryBrowser's own "or see all N deals" button
-            already carries the same number. */}
-        <div className={`items-center justify-between gap-3 mb-5 flex-wrap ${showTiles ? "hidden" : "flex"}`}>
-          <span className="text-[13px] font-semibold text-ink-soft">
-            {loading && !showTiles ? (
-              "Loading deals…"
-            ) : facetTotal !== null ? (
-              <>
-                <span className="font-mono">{facetTotal.toLocaleString()}</span> deal
-                {facetTotal === 1 ? "" : "s"}
-                {showTiles ? " to browse" : ""}
-              </>
-            ) : (
-              <>
-                <span className="font-mono">{deals.length}</span> deal{deals.length === 1 ? "" : "s"}
-              </>
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-5 text-[13px]">
+            <nav aria-label="Breadcrumb" className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={backToCategories}
+                className="font-semibold text-accent hover:text-accent-dark transition-colors"
+              >
+                ← All categories
+              </button>
+              <span aria-hidden className="text-ink-muted">/</span>
+              <span className="text-ink-soft">{browseLabel}</span>
+              <span aria-hidden className="text-ink-muted">·</span>
+              <span className="font-semibold text-ink-soft">
+                {loading ? (
+                  "Loading deals…"
+                ) : facetTotal !== null ? (
+                  <>
+                    <span className="font-mono">{facetTotal.toLocaleString()}</span> deal
+                    {facetTotal === 1 ? "" : "s"}
+                  </>
+                ) : (
+                  <>
+                    <span className="font-mono">{deals.length}</span> deal{deals.length === 1 ? "" : "s"}
+                  </>
+                )}
+              </span>
+            </nav>
+            {!loading && !error && page > 1 && (
+              <span className="text-ink-muted whitespace-nowrap">
+                Page <span className="font-mono">{page}</span>
+              </span>
             )}
-          </span>
-          {!loading && !error && !showTiles && page > 1 && (
-            <span className="text-[13px] text-ink-muted whitespace-nowrap">
-              Page <span className="font-mono">{page}</span>
-            </span>
-          )}
-        </div>
+          </div>
+        )}
 
         </div>
 
@@ -813,8 +797,18 @@ function DealsInner() {
             min-h-0 is load-bearing. Without it a flex child refuses to
             shrink below its content, this div grows to fit every card,
             and the overflow silently moves back out to the document —
-            the bug looks like "the fix did nothing". */}
-        <div className="sidebar:flex-1 sidebar:min-h-0 sidebar:overflow-y-auto sidebar:pb-16 sidebar:pr-1">
+            the bug looks like "the fix did nothing".
+
+            On the tiles view this div does NOT scroll: CategoryBrowser's
+            section is its own scroll area, so this is just a flex column
+            for it to fill. */}
+        <div
+          className={
+            showTiles
+              ? "sidebar:flex-1 sidebar:min-h-0 sidebar:flex sidebar:flex-col"
+              : "sidebar:flex-1 sidebar:min-h-0 sidebar:overflow-y-auto sidebar:pb-16 sidebar:pr-1"
+          }
+        >
 
         {showTiles ? (
           <CategoryBrowser

@@ -106,12 +106,13 @@ export function tripName(trip: Pick<Trip, "name">): string {
   return trip.name ?? "Untitled shopping trip";
 }
 
-/** "Plan 1", "Plan 2", … — the default name for a trip nobody named.
- *  `count` is however many trips already exist, so the new one lands
- *  one past them; a deleted "Plan 1" can be handed out again to
- *  whatever's created next; that's fine, nothing keys off the number. */
+/** "Shopping Trip 1", "Shopping Trip 2", … — the default name for a trip
+ *  nobody named. `count` is however many trips already exist, so the new
+ *  one lands one past them; a deleted "Shopping Trip 1" can be handed out
+ *  again to whatever's created next; that's fine, nothing keys off the
+ *  number. */
 function defaultTripName(count: number): string {
-  return `Plan ${count + 1}`;
+  return `Shopping Trip ${count + 1}`;
 }
 
 function emptyTrip(id: string, name: string | null): Trip {
@@ -777,10 +778,12 @@ export function TripsProvider({ children }: { children: ReactNode }) {
 
   const toastAdded = useCallback(
     (item: TripItem, trip: Trip, verb: "Added" | "Moved") => {
-      toast(`${verb} "${item.label}" to ${tripName(trip)}`, {
+      // The trip name is the part worth reading — the product name is the
+      // card just clicked, and a long one used to truncate the trip away.
+      toast(`${verb} to ${tripName(trip)}`, {
         actions: [
           {
-            label: "Change",
+            label: "Change trip",
             onClick: () => setPicker({ mode: "move", name: item.label, fromTripId: trip.id }),
           },
           { label: "View list", onClick: openDrawer },

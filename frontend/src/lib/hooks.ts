@@ -102,9 +102,9 @@ export function useKonamiCode(onTrigger: () => void) {
  * past FINISH_FRACTION of the way across it finishes the trip down;
  * otherwise the scroll stays where it was put.
  *
- * FINISH_FRACTION is the dial between #4 and #2, and it is set at the
- * halfway mark: cross more than half the gap and the page finishes the
- * job, stop short of half and it waits. That keeps #4's "a deliberate
+ * FINISH_FRACTION is the dial between #4 and #2, and it is set at 25%:
+ * cross a quarter of the gap and the page finishes the job, stop short
+ * of that and it waits. That keeps #4's "a deliberate
  * scroll always resolves" for the gestures that were actually heading
  * somewhere, without answering a small flick with a whole screen. The
  * cost is #2's: stop in the untouched band and the hero is partly on
@@ -127,11 +127,11 @@ export function useHeroSnap(contentId?: string) {
     // the knob that makes reaching it "hard": shrink it and it takes an
     // even more deliberate scroll to get there.
     const HERO_CAPTURE_PX = 60;
-    // Past the halfway point of the gap, finish the trip DOWN. Between
-    // the two, nothing happens — that untouched band is what stops a
-    // small flick on the hero from being answered with a full screen of
-    // travel. Toward 0 this becomes "always resolve".
-    const FINISH_FRACTION = 0.5;
+    // Past 25% of the gap, finish the trip DOWN. Between the two,
+    // nothing happens — that untouched band is what stops a small flick
+    // on the hero from being answered with a full screen of travel.
+    // Toward 0 this becomes "always resolve".
+    const FINISH_FRACTION = 0.25;
 
     const settle = () => {
       // Clamped to the page's REAL max scroll, not just innerHeight -
@@ -208,6 +208,124 @@ export function useHeroSnap(contentId?: string) {
   }, [contentId]);
 }
 
+/** The optimizer's own picks, with each item's source deal pinned (and
+ *  injected when a full product name didn't search back to itself), then
+ *  any saved picks reapplied where still available. Mutates `res` so the
+ *  injected deals show up as options and not as unmatched. */
+function resolvePicks(
+  res: OptimizeResult,
+  preferredPicks?: Record<string, number>,
+  sourceDeals?: Record<string, OptimizeOption>,
+): { picks: Record<string, number>; unavailableCount: number } {
+  const picks: Record<string, number> = {};
+  for (const sp of res.store_plans) {
+    for (const it of sp.items) picks[it.query] = it.item_id;
+  }
+  for (const [query, deal] of Object.entries(sourceDeals ?? {})) {
+    const opts = res.options[query] ?? [];
+    if (!opts.some((o) => o.item_id === deal.item_id)) res.options[query] = [deal, ...opts];
+    res.unmatched = res.unmatched.filter((q) => q !== query);
+    picks[query] = deal.item_id;
+  }
+  let unavailableCount = 0;
+  for (const [query, itemId] of Object.entries(preferredPicks ?? {})) {
+    const stillThere =
+      (res.options[query] ?? []).some((o) => o.item_id === itemId) ||
+      res.store_plans.some((sp) => sp.items.some((it) => it.query === query && it.item_id === itemId));
+    if (stillThere) picks[query] = itemId;
+    else unavailableCount++;
+  }
+  return { picks, unavailableCount };
+}
+
+// Options per query, with the optimizer's own pick merged in — in
+// "fewest stops" mode the planned item can fall outside the top-5
+// cheapest, and it still has to be selectable.
+function optionRowsOf(result: OptimizeResult | null): Record<string, OptimizeOption[]> {
+  const map: Record<string, OptimizeOption[]> = {};
+  if (!result) return map;
+  for (const [q, opts] of Object.entries(result.options)) map[q] = [...opts];
+  for (const sp of result.store_plans) {
+    for (const it of sp.items) {
+      const rows = (map[it.query] ??= []);
+      if (!rows.some((r) => r.item_id === it.item_id)) {
+        rows.push({
+          item_id: it.item_id,
+          name: it.name,
+          merchant_id: sp.merchant_id,
+          merchant_name: sp.merchant_name,
+          price: it.price,
+          size: null,
+          size_unit: null,
+          product_image: it.product_image ?? null,
+        });
+        rows.sort((a, b) => a.price - b.price);
+      }
+    }
+  }
+  return map;
+}
+
+// Receipts from the current picks, grouped by store.
+function plansOf(picks: Record<string, number>, optionRows: Record<string, OptimizeOption[]>): StorePlan[] {
+  const byStore = new Map<number, StorePlan>();
+  for (const [query, itemId] of Object.entries(picks)) {
+    const row = optionRows[query]?.find((r) => r.item_id === itemId);
+    if (!row) continue;
+    const plan =
+      byStore.get(row.merchant_id) ??
+      ({ merchant_id: row.merchant_id, merchant_name: row.merchant_name, subtotal: 0, items: [] } as StorePlan);
+    plan.items.push({ query, item_id: row.item_id, name: row.name, price: row.price, product_image: row.product_image, size: row.size, size_unit: row.size_unit });
+    plan.subtotal = Math.round((plan.subtotal + row.price) * 100) / 100;
+    byStore.set(row.merchant_id, plan);
+  }
+  return [...byStore.values()].sort((a, b) => b.subtotal - a.subtotal);
+}
+
+const totalOf = (plans: StorePlan[]) => Math.round(plans.reduce((sum, p) => sum + p.subtotal, 0) * 100) / 100;
+
+export type PriceableItem = {
+  query: string;
+  label: string;
+  pick?: number;
+  source?: { itemId: number; merchantId: number; merchantName: string; price: number; image: string | null };
+};
+
+export function sourceDealsOf(items: PriceableItem[]): Record<string, OptimizeOption> {
+  const deals: Record<string, OptimizeOption> = {};
+  for (const i of items) {
+    if (!i.source) continue;
+    deals[i.query] = {
+      item_id: i.source.itemId,
+      name: i.label,
+      merchant_id: i.source.merchantId,
+      merchant_name: i.source.merchantName,
+      price: i.source.price,
+      size: null,
+      size_unit: null,
+      product_image: i.source.image,
+    };
+  }
+  return deals;
+}
+
+/** One-shot pricing outside the planner — the trips list uses it to
+ *  bring a trip edited elsewhere (e.g. from a deal card) up to date. */
+export async function priceTrip(
+  items: PriceableItem[],
+  mode: OptimizeMode,
+  merchantIds?: number[],
+  postalCode?: string,
+): Promise<{ picks: Record<string, number>; summary: { totalCost: number; stops: number; plans: StorePlan[] } }> {
+  if (items.length === 0) return { picks: {}, summary: { totalCost: 0, stops: 0, plans: [] } };
+  const res = await optimizeTrip(items.map((i) => i.query), mode, merchantIds, postalCode);
+  const preferred: Record<string, number> = {};
+  for (const i of items) if (i.pick !== undefined) preferred[i.query] = i.pick;
+  const { picks } = resolvePicks(res, preferred, sourceDealsOf(items));
+  const plans = plansOf(picks, optionRowsOf(res));
+  return { picks, summary: { totalCost: totalOf(plans), stops: plans.length, plans } };
+}
+
 /**
  * Owns the trip-planner state: builds a plan from grocery queries,
  * tracks the user's per-item picks, and derives receipts/totals from
@@ -235,28 +353,23 @@ export function useOptimize() {
       // available is left on the optimizer's own fresh pick and counted,
       // so the caller can tell the user rather than silently swapping it.
       preferredPicks?: Record<string, number>,
+      // The deal an item was added from. A full product name often
+      // doesn't search back to itself, so without this a deal you added
+      // could come back "unmatched" on its own trip.
+      sourceDeals?: Record<string, OptimizeOption>,
     ): Promise<{ unavailableCount: number }> => {
-    if (queries.length === 0) return { unavailableCount: 0 };
+    if (queries.length === 0) {
+      setResult(null);
+      setPicks({});
+      return { unavailableCount: 0 };
+    }
     lastArgs.current = { queries, mode, merchantIds, postalCode };
     setLoading(true);
     setError(false);
     try {
       const res = await optimizeTrip(queries, mode, merchantIds, postalCode);
+      const { picks: initial, unavailableCount } = resolvePicks(res, preferredPicks, sourceDeals);
       setResult(res);
-      const initial: Record<string, number> = {};
-      for (const sp of res.store_plans) {
-        for (const it of sp.items) initial[it.query] = it.item_id;
-      }
-      let unavailableCount = 0;
-      if (preferredPicks) {
-        for (const [query, itemId] of Object.entries(preferredPicks)) {
-          const stillThere =
-            (res.options[query] ?? []).some((o) => o.item_id === itemId) ||
-            res.store_plans.some((sp) => sp.items.some((it) => it.query === query && it.item_id === itemId));
-          if (stillThere) initial[query] = itemId;
-          else unavailableCount++;
-        }
-      }
       setPicks(initial);
       return { unavailableCount };
     } catch {
@@ -278,60 +391,9 @@ export function useOptimize() {
     setPicks((prev) => ({ ...prev, [query]: itemId }));
   }, []);
 
-  // Options per query, with the optimizer's own pick merged in — in
-  // "fewest stops" mode the planned item can fall outside the top-5
-  // cheapest, and it still has to be selectable.
-  const optionRows = useMemo(() => {
-    const map: Record<string, OptimizeOption[]> = {};
-    if (!result) return map;
-    for (const [q, opts] of Object.entries(result.options)) map[q] = [...opts];
-    for (const sp of result.store_plans) {
-      for (const it of sp.items) {
-        const rows = (map[it.query] ??= []);
-        if (!rows.some((r) => r.item_id === it.item_id)) {
-          rows.push({
-            item_id: it.item_id,
-            name: it.name,
-            merchant_id: sp.merchant_id,
-            merchant_name: sp.merchant_name,
-            price: it.price,
-            size: null,
-            size_unit: null,
-            product_image: it.product_image ?? null,
-          });
-          rows.sort((a, b) => a.price - b.price);
-        }
-      }
-    }
-    return map;
-  }, [result]);
-
-  // Receipts recomputed from the current picks, grouped by store.
-  const plans = useMemo<StorePlan[]>(() => {
-    const byStore = new Map<number, StorePlan>();
-    for (const [query, itemId] of Object.entries(picks)) {
-      const row = optionRows[query]?.find((r) => r.item_id === itemId);
-      if (!row) continue;
-      const plan =
-        byStore.get(row.merchant_id) ??
-        ({ merchant_id: row.merchant_id, merchant_name: row.merchant_name, subtotal: 0, items: [] } as StorePlan);
-      plan.items.push({
-        query,
-        item_id: row.item_id,
-        name: row.name,
-        price: row.price,
-        product_image: row.product_image,
-      });
-      plan.subtotal = Math.round((plan.subtotal + row.price) * 100) / 100;
-      byStore.set(row.merchant_id, plan);
-    }
-    return [...byStore.values()].sort((a, b) => b.subtotal - a.subtotal);
-  }, [picks, optionRows]);
-
-  const totalCost = useMemo(
-    () => Math.round(plans.reduce((sum, p) => sum + p.subtotal, 0) * 100) / 100,
-    [plans],
-  );
+  const optionRows = useMemo(() => optionRowsOf(result), [result]);
+  const plans = useMemo(() => plansOf(picks, optionRows), [picks, optionRows]);
+  const totalCost = useMemo(() => totalOf(plans), [plans]);
 
   const swappable = useMemo(
     () => Object.entries(optionRows).filter(([, rows]) => rows.length > 1),
