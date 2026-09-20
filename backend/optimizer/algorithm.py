@@ -10,7 +10,7 @@ a database (see tests/test_optimizer.py).
 import re
 from itertools import combinations
 
-from textutils import variant_alternation
+from textutils import search_patterns
 
 from .models import DealRow, Mode, OptimizeResult, PlanItem, StorePlan
 
@@ -21,22 +21,36 @@ from .models import DealRow, Mode, OptimizeResult, PlanItem, StorePlan
 _EXACT_SEARCH_STORE_LIMIT = 15
 
 
-def _query_patterns(query: str) -> list[re.Pattern]:
-    """One compiled pattern per query word; every pattern must hit for a
-    deal to match. Each word also matches its singular/plural variants
-    ("banana" hits "Bananas") — same tolerance db.queries applies in SQL."""
+_WordPatterns = tuple[re.Pattern, re.Pattern | None, re.Pattern | None]
+
+
+def _query_patterns(query: str) -> list[_WordPatterns]:
+    """One (direct, cuts, exclude) pattern set per query word; every word
+    must hit for a deal to match. Each word also matches its singular/
+    plural variants ("banana" hits "Bananas") and, for meats, cut names
+    ("beef" hits "Top Sirloin Steak") — same rules db.queries applies in SQL."""
+    def compile_(alternation: str | None) -> re.Pattern | None:
+        return re.compile(rf"\b({alternation})\b") if alternation else None
+
     return [
-        re.compile(rf"\b({variant_alternation(w)})\b")
+        tuple(compile_(p) for p in search_patterns(w))  # type: ignore[misc]
         for w in query.lower().split()
     ]
 
 
-def _matches(patterns: list[re.Pattern], deal: dict) -> bool:
+def _word_hits(patterns: _WordPatterns, haystack: str) -> bool:
+    direct, cuts, exclude = patterns
+    if direct.search(haystack):
+        return True
+    return bool(cuts and cuts.search(haystack) and not (exclude and exclude.search(haystack)))
+
+
+def _matches(patterns: list[_WordPatterns], deal: dict) -> bool:
     haystack = deal["name"].lower()
     brands = deal.get("brands") or []
     if brands:
         haystack += " " + " ".join(str(b).lower() for b in brands)
-    return all(p.search(haystack) for p in patterns)
+    return all(_word_hits(p, haystack) for p in patterns)
 
 
 def _to_row(query: str, deal: dict) -> DealRow:
@@ -144,6 +158,8 @@ def _plan_item(row: DealRow) -> PlanItem:
         name=row.name,
         price=row.price,
         product_image=row.product_image,
+        size=row.size,
+        size_unit=row.size_unit,
     )
 
 

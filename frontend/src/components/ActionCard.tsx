@@ -1,11 +1,17 @@
+import type { ReactNode } from "react";
+
 import Link from "next/link";
 import GlassCard from "@/components/GlassCard";
+import { CHIP_ARROW, CHIP_CUE } from "@/lib/chip";
 
 /**
  * A large "do this" tile: icon, title, one line of detail, and an
- * "Open →" cue. The home hub's four actions and /list's New trip / My
- * trips choice. `href` makes it a link; `onClick` a button; `disabled`
- * greys it out and makes it inert (the detail line should say why).
+ * "Open" cue. The home hub's three actions and /list's New trip tile.
+ * `href` makes it a link; `onClick` a button; `disabled` greys it out
+ * and makes it inert (the detail line should say why).
+ *
+ * `cta` is the cue's WORDS only — no arrow in the string. The chip adds
+ * its own, as an element it can nudge on hover.
  */
 export default function ActionCard({
   href,
@@ -13,14 +19,16 @@ export default function ActionCard({
   icon,
   title,
   detail,
-  cta = "Open →",
+  cta = "Open",
   disabled = false,
   wrapperClassName,
   compactWhenShort = false,
 }: {
   href?: string;
   onClick?: () => void;
-  icon: string;
+  /** A 24px line icon from `components/icons` — not an emoji: those
+   *  render differently per OS and sit off the baseline. */
+  icon: ReactNode;
   title: string;
   detail: string;
   cta?: string;
@@ -30,7 +38,7 @@ export default function ActionCard({
    *  straight through to GlassCard's own wrapperClassName. */
   wrapperClassName?: string;
   /** On a short `wide:` screen (≤820px tall — a 768/800px laptop, or a
-   *  browser whose chrome eats the height), drop the icon and the "Open →" cue and
+   *  browser whose chrome eats the height), drop the icon and the cue and
    *  tighten the padding — for the home hub, which has to fit one
    *  screen. The whole tile is still the link, so nothing is lost. */
   compactWhenShort?: boolean;
@@ -43,20 +51,31 @@ export default function ActionCard({
 
   const body = (
     <>
-      <span aria-hidden className={`block text-[30px] leading-none ${short ? "wide:[@media(max-height:820px)]:hidden" : ""}`}>
+      <span
+        aria-hidden
+        className={`flex h-11 w-11 items-center justify-center rounded-control bg-accent-soft text-accent-dark ${
+          short ? "wide:[@media(max-height:820px)]:hidden" : ""
+        }`}
+      >
         {icon}
       </span>
       <span
         className={`block mt-4 font-display text-[19px] leading-tight transition-colors ${short ? "wide:[@media(max-height:820px)]:mt-0" : ""} ${
-          disabled ? "text-ink-muted" : "text-ink group-hover:text-accent"
+          disabled ? "text-ink-muted" : "text-ink group-hover:text-accent-dark"
         }`}
       >
         {title}
       </span>
-      <span className="block mt-2 text-[14px] text-ink-soft leading-snug">{detail}</span>
+      {/* Two lines' worth of room whether or not this line needs it, so
+          a row of these lines its cues up instead of stepping down
+          wherever each sentence happens to stop. */}
+      <span className="block mt-2 min-h-[2.8em] text-[14px] text-ink-soft leading-snug">{detail}</span>
       {!disabled && (
-        <span aria-hidden className={`block mt-4 text-[14px] font-semibold text-accent ${short ? "wide:[@media(max-height:820px)]:hidden" : ""}`}>
-          {cta}
+        <span className={`block mt-4 ${short ? "wide:[@media(max-height:820px)]:hidden" : ""}`}>
+          <span aria-hidden className={CHIP_CUE}>
+            {cta}
+            <span className={CHIP_ARROW}>→</span>
+          </span>
         </span>
       )}
     </>

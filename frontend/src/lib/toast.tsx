@@ -41,6 +41,13 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 const MAX_VISIBLE = 3;
 const DEFAULT_DURATION = 4500;
 
+/** For undo toasts that are the ONLY guard on something expensive to
+ *  rebuild — a deleted trip, a cleared list. The default is tuned for
+ *  "I removed one item", where re-adding costs a click; it is not
+ *  enough time to notice and reverse the loss of a priced trip.
+ *  Pass as `duration`; see the delete handlers in `app/list/page.tsx`. */
+export const UNDO_DURATION_LONG = 12_000;
+
 /**
  * Lightweight toast stack, bottom-center. Each toast auto-dismisses;
  * an optional action ("Undo", "View list") dismisses on click. Capped
@@ -119,7 +126,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                     action.onClick();
                     dismiss(t.id);
                   }}
-                  className="text-[13px] font-semibold text-accent hover:text-accent-dark px-2 py-1 rounded-control transition-colors shrink-0"
+                  className="text-[13px] font-semibold text-accent-dark hover:text-accent-deep px-2 py-1 rounded-control transition-colors shrink-0"
                 >
                   {action.label}
                 </button>

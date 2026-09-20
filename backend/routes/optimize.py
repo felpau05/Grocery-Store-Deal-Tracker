@@ -83,6 +83,8 @@ def run_optimizer(body: OptimizeRequest):
                         "name": i.name,
                         "price": i.price,
                         "product_image": i.product_image,
+                        "size": i.size,
+                        "size_unit": i.size_unit,
                     }
                     for i in sp.items
                 ],

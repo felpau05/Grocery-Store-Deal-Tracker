@@ -73,6 +73,26 @@ export const CHIP_QUIET_LIGHT =
    saturated thing in the row, and it needs to survive being surrounded
    by white. */
 export const CHIP_ACTIVE_LIGHT =
-  "bg-accent border-accent text-white hover:bg-accent-dark hover:border-accent-dark";
+  "bg-accent-dark border-accent-dark text-white hover:bg-accent-deep hover:border-accent-deep";
 
 export const CHIP_DISABLED_LIGHT = "bg-surface-2 border-line text-ink-muted";
+
+/* The cue INSIDE a card that is itself the link or button — ActionCard's
+   "Open", the cart drawer's footer pair. It used to be bare green bold
+   text with an arrow glued on ("Open →", "All shopping trips →"), which
+   is the one control style in the app that looked like nothing else in
+   it: not a button, not body copy, and on a narrow panel it wrapped
+   mid-phrase into two ragged green lines. Same chip as the rest of the
+   body now.
+
+   It reacts to hovering the CARD, not itself, so the call site needs
+   `group` on the element that is actually the control. Use
+   `CHIP_QUIET_LIGHT` instead for a chip that IS the control. */
+export const CHIP_CUE =
+  `${CHIP_SOFT} bg-surface-2 border-line text-ink-soft ` +
+  "group-hover:bg-accent-soft group-hover:border-accent/40 group-hover:text-accent-dark";
+
+/** The arrow that trails a cue or a secondary link — its own element, so
+ *  it can nudge on hover and can't be wrapped onto a line by itself the
+ *  way a glyph pasted into the label string could. */
+export const CHIP_ARROW = "transition-transform duration-200 group-hover:translate-x-0.5";

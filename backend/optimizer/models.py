@@ -36,6 +36,8 @@ class PlanItem:
     # off the shelf. Defaults to None so older deal dicts (tests) still
     # build a plan.
     product_image: str | None = None
+    size: float | None = None
+    size_unit: str | None = None
 
 
 @dataclass

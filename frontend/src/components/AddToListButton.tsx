@@ -49,12 +49,16 @@ function PlusGlyph({ className = "w-4 h-4" }: { className?: string }) {
  * lib/trips.tsx) and otherwise never opens anything — the toast offers
  * "Change" and "View list" instead, so rapid adds stay rapid.
  *
- * `compact` is now icon-only and deliberately recessed at rest (75%
- * opacity, hairline outline, no label): on a 24-card grid it was one
- * more thing competing for attention on every card, when what it
- * actually needs to be is available-when-wanted. It comes fully up on
- * card hover and fills accent on its own hover/focus. Once the item IS
- * on the list that's state worth seeing, so that one stays solid.
+ * `compact` is icon-only and wears the accent at rest — a pale green
+ * fill with a green rule and glyph, going solid green on its own hover
+ * or focus, and solid green with a tick once the item is on the list.
+ * It spent a while recessed instead (75% opacity, grey hairline, only
+ * coming up on card hover), on the theory that 24 of them shouldn't
+ * compete for attention. What that actually produced was a grey ghost
+ * that didn't read as a control at all until you were already on top of
+ * it, on a card whose only other colour was the product photo. Being
+ * the one accent-coloured thing on the card is what makes it legible as
+ * the card's one button.
  *
  * It still goes through `toggleChip()` — the helper's base is a
  * hairline + `rounded-pill` + a transition now, which at 32px tall is
@@ -103,15 +107,10 @@ export default function AddToListButton({
         aria-label={label}
         aria-pressed={inList}
         title={hint}
-        // Hover states are split across two properties on purpose:
-        // `group-hover` only ever touches opacity, `hover`/`focus` only
-        // ever touch colour. Both variants have the same specificity, so
-        // having them fight over the same property would leave which one
-        // wins up to Tailwind's variant ordering.
         className={`inline-flex h-8 shrink-0 items-center justify-center gap-0.5 px-2.5 active:translate-y-px ${toggleChip(
           inList,
           "border-accent bg-accent text-white hover:bg-accent-dark hover:border-accent-dark",
-          "border-line bg-surface text-ink-soft opacity-75 group-hover:opacity-100 focus-visible:opacity-100 hover:border-accent hover:bg-accent hover:text-white",
+          "border-accent/35 bg-accent-soft text-accent-dark hover:border-accent hover:bg-accent hover:text-white",
         )}`}
       >
         {/* "+ cart" to add, "✓ cart" once added — the same width either

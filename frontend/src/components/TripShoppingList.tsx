@@ -100,7 +100,7 @@ export default function TripShoppingList({ trip }: { trip: Trip }) {
                     >
                       <StopBadge n={i + 1} />
                       <span className="min-w-0 flex-1">
-                        <span className="block text-sm text-ink truncate transition-colors group-hover:text-accent">
+                        <span className="block text-sm text-ink truncate transition-colors group-hover:text-accent-dark">
                           {plan.merchant_name}
                         </span>
                         <span className="block text-[11px] text-ink-muted">
@@ -213,6 +213,14 @@ export function StoreSections({ plans, swaps }: { plans: StorePlan[]; swaps?: Sw
                 const options = swaps?.options.get(item.query);
                 const isOpen = !!options && open.has(item.query);
                 const size = formatOptionSize(item.size, item.size_unit);
+                // "<product> for <query>" earns its place when the
+                // optimiser picked something you didn't literally ask
+                // for ("Burnbrae Omega-3 Eggs for eggs"). An item added
+                // from a deal card carries the product's own name as
+                // its query, so the same template restates it:
+                // "Green Cabbage for Green Cabbage".
+                const echoesName =
+                  item.name.trim().toLowerCase() === item.query.trim().toLowerCase();
                 return (
                   // Keyed by query: two queries ("milk", "2% milk") can
                   // land on the same deal, so item_id isn't unique here.
@@ -221,13 +229,19 @@ export function StoreSections({ plans, swaps }: { plans: StorePlan[]; swaps?: Sw
                       <Link href={`/item/${item.item_id}`} className="group flex items-center gap-3.5 min-w-0 flex-1">
                         <Thumb src={item.product_image} />
                         <div className="min-w-0 flex-1">
-                          <span className="block font-display text-[15px] leading-snug text-ink transition-colors group-hover:text-accent">
+                          <span className="block font-display text-[15px] leading-snug text-ink transition-colors group-hover:text-accent-dark">
                             {item.name}
                           </span>
-                          <span className="block text-[12px] text-ink-muted mt-1">
-                            for <span className="capitalize">{item.query}</span>
-                            {size ? ` · ${size}` : ""}
-                          </span>
+                          {(!echoesName || size) && (
+                            <span className="block text-[12px] text-ink-muted mt-1">
+                              {!echoesName && (
+                                <>
+                                  for <span className="capitalize">{item.query}</span>
+                                </>
+                              )}
+                              {size ? (echoesName ? size : ` · ${size}`) : ""}
+                            </span>
+                          )}
                         </div>
                       </Link>
                       <div className="shrink-0 flex flex-col items-end gap-1.5">
@@ -279,7 +293,7 @@ export function StoreSections({ plans, swaps }: { plans: StorePlan[]; swaps?: Sw
                               >
                                 <Thumb src={row.product_image} size="sm" />
                                 <span className="min-w-0 flex-1">
-                                  <span className="block font-display text-[13px] leading-snug text-ink line-clamp-2 transition-colors group-hover:text-accent">
+                                  <span className="block font-display text-[13px] leading-snug text-ink line-clamp-2 transition-colors group-hover:text-accent-dark">
                                     {row.name}
                                   </span>
                                   <span className={`block text-[11px] mt-0.5 truncate ${selected ? "text-ink-soft" : "text-ink-muted"}`}>

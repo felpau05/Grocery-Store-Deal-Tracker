@@ -33,6 +33,11 @@ type AccountContextValue = {
   user: Account | null;
   /** True until the stored session (if any) has been checked */
   loading: boolean;
+  /** We hold a token but couldn't reach /me to resolve it. Distinct from
+   *  `user === null`, which means genuinely anonymous — without this the
+   *  two collapse and a server outage renders as "you're signed out",
+   *  offering the one action that can't work while it lasts. */
+  sessionError: boolean;
   /** Non-secret backend config: example postal code, Google availability */
   meta: Meta | null;
   /** The user's chosen store ids — null when anonymous or no selection */
@@ -43,6 +48,8 @@ type AccountContextValue = {
   signUp: (name: string, email: string, password: string) => Promise<Account>;
   signIn: (email: string, password: string) => Promise<Account>;
   signOut: () => void;
+  /** Re-run the /me resolution after a `sessionError` */
+  retrySession: () => void;
   /** Store a token minted elsewhere (Google callback hash) and load the user */
   adoptToken: (token: string) => Promise<void>;
   updatePrefs: (prefs: {
@@ -63,12 +70,16 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<Account | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sessionError, setSessionError] = useState(false);
+  // Bumped by retrySession() to re-run the resolution effect below.
+  const [resolveKey, setResolveKey] = useState(0);
   const [scrapeStatus, setScrapeStatus] = useState<ScrapeStatus | null>(null);
   const { toast } = useToast();
   const wasRunning = useRef(false);
 
   useEffect(() => {
     fetchMeta().then(setMeta).catch(() => {});
+    setSessionError(false);
     if (!getToken()) {
       setLoading(false);
       return;
@@ -91,6 +102,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
           const me = await fetchMe();
           if (!cancelled) {
             setUser(me);
+            setSessionError(false);
             setLoading(false);
           }
           return;
@@ -98,8 +110,10 @@ export function AccountProvider({ children }: { children: ReactNode }) {
           const status = (err as Error & { status?: number }).status;
           if (cancelled) return;
           if (status === 401) {
+            // A real sign-out, not a reachability problem.
             setToken(null);
             setUser(null);
+            setSessionError(false);
             setLoading(false);
             toast("Your session expired — sign in again to see your stores");
             return;
@@ -115,6 +129,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       // recovers) and stop the spinner, but say it's a connection
       // problem — do NOT pretend the user is signed out.
       if (!cancelled) {
+        setSessionError(true);
         setLoading(false);
         toast("Couldn't reach the server — check your connection and refresh");
       }
@@ -124,7 +139,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [resolveKey]);
 
   const pollScrapeStatus = useCallback(async () => {
     try {
@@ -168,6 +183,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     const { token, user: created } = await apiSignup(name, email, password);
     setToken(token);
     setUser(created);
+    setSessionError(false);
     return created;
   }, []);
 
@@ -175,17 +191,25 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     const { token, user: found } = await apiLogin(email, password);
     setToken(token);
     setUser(found);
+    setSessionError(false);
     return found;
   }, []);
 
   const signOut = useCallback(() => {
     setToken(null);
     setUser(null);
+    setSessionError(false);
+  }, []);
+
+  const retrySession = useCallback(() => {
+    setLoading(true);
+    setResolveKey((k) => k + 1);
   }, []);
 
   const adoptToken = useCallback(async (token: string) => {
     setToken(token);
     setUser(await fetchMe());
+    setSessionError(false);
   }, []);
 
   const updatePrefs = useCallback(
@@ -218,8 +242,8 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   return (
     <AccountContext.Provider
       value={{
-        user, loading, meta, merchantIds, scrapeStatus,
-        signUp, signIn, signOut, adoptToken, updatePrefs,
+        user, loading, sessionError, meta, merchantIds, scrapeStatus,
+        signUp, signIn, signOut, retrySession, adoptToken, updatePrefs,
       }}
     >
       {children}

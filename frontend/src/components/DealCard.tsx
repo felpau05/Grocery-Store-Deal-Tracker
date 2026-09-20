@@ -2,15 +2,12 @@ import Link from "next/link";
 import type { Deal } from "@/lib/api";
 import AddToListButton from "./AddToListButton";
 import GlassCard, { GLASS_SURFACE_DENSE } from "./GlassCard";
-import { FIELD_LABEL } from "@/lib/fieldLabel";
 import PriceTag from "./PriceTag";
 
 /**
  * Only "gone today or tomorrow" (or already gone) changes whether you
  * click. A full "Expires Sep 16" is detail-page material, so anything
- * further out returns null and the card renders no expiry at all —
- * every card carrying a date was most of what made the old meta rows
- * look like a spec sheet.
+ * further out returns null and the card renders no expiry at all.
  */
 function urgentExpiry(validTo: string): string | null {
   // Date-only strings parse as UTC midnight; pin to local so "today" is right.
@@ -25,24 +22,24 @@ function urgentExpiry(validTo: string): string | null {
 }
 
 /**
- * One deal in the grid.
+ * One deal in the grid: picture, store, name, price.
  *
- * This card used to render nine things at once — image, merchant in
- * letterspaced mono caps, name, a rotated price sticker, a colour-coded
- * category pill, size, brand list, an expiry line, and a 🟢/🟡/🔴
- * "deal-o-meter" verdict — twenty-four times a screen. The brief for
- * the redesign was that a card only has to tell you whether to click
- * it, so it is now: picture, name, price, store. Category, size,
- * brands, the non-urgent expiry date and the verdict all still exist on
- * the item detail page, one click away; none of them were deleted from
- * the app, only from this face.
+ * Category, size, brands, the non-urgent expiry date and the
+ * cheap/average/dear verdict all still exist on the item detail page,
+ * one click away — a card only has to tell you whether to click it.
  *
- * The layout is a product tile rather than a row: a full-bleed 4:3
- * image well at the top (clipped by the surface's own `rounded-card` +
- * `overflow-hidden`, so it sits flush into the card's top edge) with
- * the text block under it. That gives the photo roughly 8-10x the area
- * the old 64px bordered thumbnail had, which makes it — not the price
- * sticker — the thing you actually scan.
+ * The layout is a product tile: a full-bleed 4:3 image well at the top
+ * (clipped by the surface's own `rounded-card` + `overflow-hidden`),
+ * then a text block whose FIRST TWO ROWS ARE FIXED-HEIGHT. That is what
+ * keeps a row of cards aligned: store is one line, the name reserves
+ * two whether it needs them or not, so every price in a row sits on the
+ * same baseline instead of floating wherever its own name happened to
+ * stop. Names are ragged; a grid of them shouldn't be.
+ *
+ * Nothing here is labelled. It carried "Name:", "Price:", "Unit Price:"
+ * and "Store:" captions in tiny uppercase before, which cost four rows
+ * of grey text per card to announce what a photo, a dollar sign and a
+ * supermarket's name already say.
  */
 export default function DealCard({
   deal,
@@ -83,10 +80,25 @@ export default function DealCard({
       href={`/item/${deal.item_id}`}
       interactive
       wrapperClassName={fillAtWide ? "wide:h-full" : ""}
-      surfaceClassName={`group block ${GLASS_SURFACE_DENSE} ${fillAtWide ? "wide:h-full wide:flex wide:flex-col" : ""}`}
+      surfaceClassName={`group flex flex-col ${GLASS_SURFACE_DENSE} ${fillAtWide ? "wide:h-full" : ""}`}
     >
+      {/* This well is always FILLED edge to edge, which is what stops a
+          row of cards looking ragged: every flyer image arrives a
+          different shape, and a plain `object-contain` gave each card a
+          differently-sized picture floating in a differently-shaped
+          pool of white.
+
+          It's filled by a blurred copy of the product's own photo, not
+          by cropping the photo itself. Straight `object-cover` does
+          produce one clean band, but on packaged goods it cuts the
+          label — a bag of chips lost its brand off the left edge, and
+          the brand is most of why you'd click it. Two layers cost
+          nothing extra (same URL, one download, the browser serves the
+          second from cache) and settle the card's colour as a bonus:
+          the well picks up whatever the product is, so a row reads as a
+          row of products rather than six white boxes on a pink page. */}
       <div
-        className={`relative aspect-[4/3] bg-surface-2 ${
+        className={`relative aspect-[4/3] overflow-hidden border-b border-line bg-surface-2 ${
           fillAtWide ? "wide:aspect-auto wide:flex-1 wide:min-h-12" : ""
         }`}
       >
@@ -111,48 +123,73 @@ export default function DealCard({
           </svg>
         </span>
         {deal.product_image && (
-          <img
-            src={deal.product_image}
-            // Empty alt on purpose: the card's accessible name comes
-            // from the product name right below, and announcing it
-            // twice per card is noise in a 24-card grid.
-            alt=""
-            loading="lazy"
-            decoding="async"
-            className="absolute inset-0 h-full w-full object-contain p-3"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = "none";
-            }}
-          />
+          <>
+            {/* Scaled up past the edges so the blur has something to
+                bleed FROM — at scale-100 its own softened border shows
+                as a grey frame just inside the well. */}
+            <img
+              src={deal.product_image}
+              alt=""
+              aria-hidden
+              loading="lazy"
+              decoding="async"
+              className="absolute inset-0 h-full w-full scale-125 object-cover opacity-45 blur-2xl"
+            />
+            <img
+              src={deal.product_image}
+              // Empty alt on purpose: the card's accessible name comes
+              // from the product name right below, and announcing it
+              // twice per card is noise in a 24-card grid.
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="absolute inset-0 h-full w-full object-contain p-3"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = "none";
+              }}
+            />
+          </>
         )}
+        {/* Keeps `danger` — expiry is a warning and it should look like
+            one. Only the SIZE changed: at full badge size, six cards in
+            a row all ending today read as six warning labels across the
+            strip, and this is meant to be read once you're already
+            looking at one card. It was briefly a dark ink chip, on a
+            contrast argument (the pale pink pill is weak on a red-meat
+            photo); the pill sits on the white image well rather than on
+            the photo itself now, so that argument no longer applies. */}
         {expiry && (
-          <span className="badge-soft-danger absolute left-2.5 top-2.5 shadow-soft">{expiry}</span>
+          <span className="badge-soft-danger badge-xs absolute left-2 top-2 shadow-soft">
+            {expiry}
+          </span>
         )}
       </div>
 
-      <div className={`p-4 ${fillAtWide ? "wide:shrink-0" : ""}`}>
-        {/* The most legible element on the card, by design. */}
-        <h3 className="font-display line-clamp-2 text-[15px] leading-snug text-ink transition-colors group-hover:text-accent">
-          <span className={FIELD_LABEL}>Name:</span>
+      <div className={`flex flex-col p-3.5 ${fillAtWide ? "wide:shrink-0" : ""}`}>
+        {/* Store first, as the tile's eyebrow — one line, always. */}
+        <p className="truncate text-[11.5px] font-medium text-ink-muted">{deal.merchant_name}</p>
+
+        {/* The most legible element on the card, by design. The min-h
+            is two lines at this leading: a one-line name leaves the
+            gap rather than pulling the price up out of line with its
+            neighbours. */}
+        <h3 className="font-display mt-1 line-clamp-2 min-h-[2.6em] text-[14.5px] leading-[1.3] text-ink transition-colors group-hover:text-accent">
           {deal.name}
         </h3>
 
-        <div className="mt-3 flex items-end justify-between gap-3">
-          <div className="min-w-0">
-            <PriceTag
-              price={deal.price}
-              priceUnit={deal.price_unit}
-              perUnit={deal.price_per_unit}
-              perUnitLabel={deal.price_per_unit_label}
-              highConfidence={deal.high_confidence}
-            />
-            {/* Quiet and sentence case — it was uppercase letterspaced
-                mono, which made the store shout louder than the price. */}
-            <p className="mt-2 truncate text-[12px] text-ink-soft">
-              <span className={FIELD_LABEL}>Store:</span>
-              {deal.merchant_name}
-            </p>
-          </div>
+        {/* The add button belongs beside the price, not up in the
+            photo's corner: over a full-bleed image it read as part of
+            the picture, and on the card's one row of controls it reads
+            as the card's one control. Centred against the two price
+            lines. */}
+        <div className="mt-2.5 flex items-center justify-between gap-2">
+          <PriceTag
+            price={deal.price}
+            priceUnit={deal.price_unit}
+            perUnit={deal.price_per_unit}
+            perUnitLabel={deal.price_per_unit_label}
+            highConfidence={deal.high_confidence}
+          />
           <AddToListButton
             name={deal.name}
             compact

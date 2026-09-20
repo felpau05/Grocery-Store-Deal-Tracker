@@ -16,13 +16,13 @@
 /** CartDrawer's cart-row "+ Add" action, and list/page.tsx's matching
  *  one — verbatim in both. */
 export const BTN_CART_ADD =
-  "btn-brut-ink rounded-control px-3 py-2 bg-accent text-white text-sm font-semibold hover:bg-accent-dark";
+  "btn-brut-ink rounded-control px-3 py-2 bg-accent-dark text-white text-sm font-semibold hover:bg-accent-deep";
 
 /** page.tsx's "Retry" button and list/page.tsx's matching follow-up CTAs
  *  below other content (its own Retry, and "Save as draft" under the
  *  trip total) — verbatim in each, including the shared mt-4. */
 export const BTN_FOLLOWUP_CTA =
-  "btn-brut-ink rounded-control mt-4 px-4 py-2 bg-accent text-white text-sm font-semibold hover:bg-accent-dark";
+  "btn-brut-ink rounded-control mt-4 px-4 py-2 bg-accent-dark text-white text-sm font-semibold hover:bg-accent-deep";
 
 /** The account-nudge banners on "/" and "/list" (no postal code / no
  *  stores / anonymous visitor) — verbatim ×3 in the same file. No
@@ -30,7 +30,7 @@ export const BTN_FOLLOWUP_CTA =
  *  action, and shouting the action was most of why it read as an alert
  *  rather than a suggestion. */
 export const BTN_NUDGE_CTA =
-  "btn-brut-ink rounded-control px-3.5 py-1.5 bg-accent text-white font-semibold text-[13px] shrink-0 hover:bg-accent-dark";
+  "btn-brut-ink rounded-control px-3.5 py-1.5 bg-accent-dark text-white font-semibold text-[13px] shrink-0 hover:bg-accent-deep";
 
 /** A secondary action beside a primary one — "Cancel", "Clear filters",
  *  "Fewest stops". Outlined, fills only on hover. New: every call site
@@ -55,4 +55,4 @@ export const BTN_SECONDARY =
  *  keeping both compounded to ~20%, a ghosted look on this exact
  *  button. */
 export const BTN_PRIMARY_CTA =
-  "glow-btn w-full bg-accent text-white font-display text-[15px] py-3 hover:bg-accent-dark transition-colors";
+  "glow-btn w-full bg-accent-dark text-white font-display text-[15px] py-3 hover:bg-accent-deep transition-colors";

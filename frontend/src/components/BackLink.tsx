@@ -7,9 +7,10 @@ import { useRouter } from "next/navigation";
  * (which lives in the URL params). Falls back to "/deals" on a direct
  * visit. Pass `href` (and a `label`) for a fixed destination instead.
  *
- * A quiet text link with a chevron, not a bordered chip — it's the
- * lowest-priority control on the page and shouldn't look like an action
- * competing with "Add to grocery list".
+ * A plain white button, the same size as the primary CTA. It was
+ * a grey text link, which read as a caption rather than something you can
+ * press. White rather than accent, so it never competes with a page's
+ * primary action.
  */
 export default function BackLink({ href, label = "Back to deals" }: { href?: string; label?: string } = {}) {
   const router = useRouter();
@@ -21,20 +22,10 @@ export default function BackLink({ href, label = "Back to deals" }: { href?: str
       onClick={() =>
         href ? router.push(href) : window.history.length > 1 ? router.back() : router.push("/deals")
       }
-      className="inline-flex items-center gap-1.5 rounded-control text-[13px] font-semibold text-ink-soft hover:text-accent transition-colors"
+      // Same size as BTN_PRIMARY_CTA ("Save my stores": font-display
+      // 15px, py-3, px-6) so the two read as a pair, just white.
+      className="btn-soft-quiet shadow-soft inline-flex items-center justify-center px-6 py-3 font-display text-[15px] text-ink"
     >
-      <svg
-        aria-hidden
-        viewBox="0 0 16 16"
-        className="w-3.5 h-3.5 shrink-0"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.9"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M10 3.5 5.5 8l4.5 4.5" />
-      </svg>
       {label}
     </button>
   );

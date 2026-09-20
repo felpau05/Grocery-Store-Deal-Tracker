@@ -97,6 +97,12 @@ class Config:
     # scraper-go itself has no such fallback — it requires Redis to boot.
     REDIS_URL: str = os.getenv("REDIS_URL") or ""
 
+    # ── Price history / retention ────────────────────────────────────
+    # One window for both: how far back the item page's "past deals"
+    # reaches AND how long maintenance/prune.py keeps data. Kept as one
+    # number so the chart can never ask for history prune has deleted.
+    HISTORY_WEEKS: int = int(os.getenv("HISTORY_WEEKS") or 12)
+
     # ── Classification backfill ──────────────────────────────────────
     # How often classifier/backfill.py sweeps items.category IS NULL.
     CLASSIFIER_BACKFILL_INTERVAL_SECONDS: int = int(

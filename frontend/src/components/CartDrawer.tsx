@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { CHIP_ARROW, CHIP_QUIET_LIGHT, CHIP_SOFT } from "@/lib/chip";
 import { BTN_CART_ADD } from "@/lib/button";
 import { useDialogFocus } from "@/lib/hooks";
 import { tripName, useCart, useTrips, type CartEntry } from "@/lib/trips";
 import { useToast } from "@/lib/toast";
 import CartGlyph from "./CartGlyph";
+import { IconReceipt } from "@/components/icons";
 
 const SEEDS = ["milk", "eggs", "bread", "chicken", "bananas", "coffee"];
 
@@ -183,20 +185,25 @@ function TripSwitcher() {
                 </button>
               </form>
             ) : (
-              <div className="flex items-center justify-between gap-3">
+              /* Two real chips that split the row evenly, not two runs of
+                 bold green text. At this panel's width the old pair wrapped
+                 mid-phrase into ragged lines and neither read as pressable;
+                 `flex-1` + `basis-0` makes them equal halves at any width. */
+              <div className="flex items-stretch gap-2">
                 <button
                   onClick={() => setNaming(true)}
-                  className="text-sm font-semibold text-accent hover:text-accent-dark transition-colors"
+                  className={`${CHIP_SOFT} flex-1 basis-0 ${CHIP_QUIET_LIGHT}`}
                 >
-                  + New shopping trip
+                  <span aria-hidden>+</span> New trip
                 </button>
                 {trips.length > 0 && (
                   <Link
                     href="/list"
                     onClick={closeDrawer}
-                    className="text-[13px] font-semibold text-ink-soft hover:text-accent transition-colors"
+                    className={`group ${CHIP_SOFT} flex-1 basis-0 ${CHIP_QUIET_LIGHT}`}
                   >
-                    All shopping trips →
+                    All trips
+                    <span aria-hidden className={CHIP_ARROW}>→</span>
                   </Link>
                 )}
               </div>
@@ -336,7 +343,7 @@ export default function CartDrawer() {
 
             {entries.length === 0 ? (
               <div className="flex flex-col items-center text-center px-6 py-8">
-                <span className="text-3xl mb-2" aria-hidden>🧾</span>
+                <IconReceipt size={30} className="mb-2 text-ink-muted" />
                 <p className="text-sm text-ink-soft mb-4">Nothing on this list yet</p>
                 <div className="flex flex-wrap justify-center gap-1.5">
                   {SEEDS.map((s) => (

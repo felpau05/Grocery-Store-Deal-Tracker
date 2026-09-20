@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { fetchDealHistory } from "@/lib/api";
+import { mergePriceRuns } from "@/lib/priceHistory";
 import AddToListButton from "@/components/AddToListButton";
 import BackLink from "@/components/BackLink";
 import PriceChart from "@/components/PriceChart";
@@ -37,36 +38,49 @@ function expiryInfo(validTo: string): { label: string; urgent: boolean } {
   return { label: `${days} days left`, urgent: days <= 2 };
 }
 
-/** One line of the spec block. Sentence-case label, value on the right,
- *  mono only when the value is a number. */
+/* One table, two columns — see SPEC_TABLE. The rule under a row is
+   drawn by the two cells themselves, so this kills it on the last pair
+   whichever cell that is. */
+/* 8.5rem is the narrowest first column that keeps "Price confidence"
+   and "Name in the flyer" — the two longest labels — on one line at
+   phone width. */
+const SPEC_TABLE = "grid grid-cols-[8.5rem_1fr] sm:grid-cols-[10rem_1fr] [&>*:nth-last-child(-n+2)]:border-0";
+
+/** One line of the spec block: label in the left column, value in the
+ *  right one, mono only when the value is a number.
+ *
+ *  Both cells are direct children of the `dl` grid rather than each row
+ *  being its own flex div — that's what makes it a TABLE. Laid out per
+ *  row, each row sized itself: short values sat hard against the right
+ *  edge with a stretch of nothing between them and their label, long
+ *  ones dropped underneath it, and no two values started at the same x.
+ *  A fixed label column means every value begins on one line and prose
+ *  simply wraps inside its own column instead of needing a second
+ *  layout. */
 function SpecRow({
   label,
   value,
   mono = false,
-  stacked = false,
+  preLine = false,
 }: {
   label: string;
   value: React.ReactNode;
   mono?: boolean;
-  /** Label above a full-width value — for prose (the flyer's own text)
-   *  that reads wrong squeezed right-aligned beside its label. */
-  stacked?: boolean;
+  /** Keep the flyer's own line breaks — its raw text is the one value
+   *  here that arrives pre-formatted. */
+  preLine?: boolean;
 }) {
-  if (stacked) {
-    return (
-      <div className="py-2.5 border-b border-line last:border-0">
-        <dt className="text-[13px] text-ink-soft">{label}</dt>
-        <dd className="text-[14px] text-ink mt-1 leading-relaxed whitespace-pre-line">{value}</dd>
-      </div>
-    );
-  }
   return (
-    <div className="flex items-baseline justify-between gap-6 py-2.5 border-b border-line last:border-0">
-      <dt className="text-[13px] text-ink-soft shrink-0">{label}</dt>
-      <dd className={`text-[14px] text-ink text-right font-medium ${mono ? "font-mono" : ""}`}>
+    <>
+      <dt className="text-[13px] text-ink-soft py-2.5 pr-4 border-b border-line">{label}</dt>
+      <dd
+        className={`text-[14px] text-ink font-medium py-2.5 border-b border-line leading-relaxed min-w-0 break-words ${
+          mono ? "font-mono" : ""
+        } ${preLine ? "whitespace-pre-line" : ""}`}
+      >
         {value}
       </dd>
-    </div>
+    </>
   );
 }
 
@@ -96,7 +110,28 @@ export default async function ItemPage({
   // computed from what's on screen), so the honest version here is the
   // item's OWN history — same question, answered with data this page
   // actually holds.
-  const prices = history.map((p) => p.price);
+  //
+  // The history the API returns can include a flyer that has been
+  // published but has not started yet. That is real data and we keep it,
+  // but it is not something anyone has "seen" — so the low/high claim is
+  // computed over started windows only, and the future one is labelled
+  // as what it is wherever it appears.
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const isUpcoming = (p: { valid_from: string }) => p.valid_from > todayKey;
+
+  /* Flyer windows, collapsed into runs at one price — see
+     mergePriceRuns. A store that runs a 4-week flyer AND repeats the
+     item weekly inside it reports the same $1.28 three times over
+     overlapping dates, which read as three deals stacked on top of each
+     other ("Aug 27 – Sep 23", "Sep 10 – Sep 16", "Sep 17 – Sep 23").
+     Everything below this line works in runs, so the list, the low/high
+     claim and the chart all tell the same story. */
+  const runs = mergePriceRuns(history, todayKey);
+  const past = runs.filter((p) => !isUpcoming(p));
+  const upcoming = runs.filter(isUpcoming);
+
+  const prices = past.map((p) => p.price);
   const low = prices.length > 0 ? Math.min(...prices) : null;
   const high = prices.length > 0 ? Math.max(...prices) : null;
   const atLow = low !== null && high !== null && high > low && item.price <= low;
@@ -159,11 +194,11 @@ export default async function ItemPage({
       {/* ── Specs ────────────────────────────────────────────────── */}
       <h2 className="font-display text-ink text-lg mb-3">Details</h2>
       <GlassCard surfaceClassName={`${GLASS_SURFACE_DENSE} px-5 py-1`}>
-        <dl>
+        <dl className={SPEC_TABLE}>
           <SpecRow
             label="Price"
             value={
-              <span className="text-accent text-[18px] font-semibold">
+              <span className="text-accent-dark text-[18px] font-semibold">
                 {item.price_unit === "each" ? `$${item.price.toFixed(2)} each` : `$${item.price.toFixed(2)}`}
               </span>
             }
@@ -223,18 +258,20 @@ export default async function ItemPage({
           {/* The raw text as the store printed it, before our cleanup —
               where variants, per-kg prices and fine print show up. */}
           {item.original_name && item.original_name !== item.name && (
-            <SpecRow label="Name in the flyer" value={item.original_name} stacked />
+            <SpecRow label="Name in the flyer" value={item.original_name} preLine />
           )}
           {item.original_description && (
-            <SpecRow label="Flyer description" value={item.original_description} stacked />
+            <SpecRow label="Flyer description" value={item.original_description} preLine />
           )}
         </dl>
       </GlassCard>
 
       {/* ── Price history ────────────────────────────────────────── */}
       <div className="flex items-baseline justify-between gap-4 flex-wrap mt-8 mb-3">
-        <h2 className="font-display text-ink text-lg">Past deals at {item.merchant_name}</h2>
-        {low !== null && high !== null && history.length >= 2 && (
+        <h2 className="font-display text-ink text-lg">
+          {upcoming.length > 0 ? "Price history at" : "Past deals at"} {item.merchant_name}
+        </h2>
+        {low !== null && high !== null && past.length >= 2 && (
           <p className="text-[13px] text-ink-soft">
             {atLow ? (
               <span className="text-accent-dark font-semibold">Lowest price we&apos;ve seen</span>
@@ -247,13 +284,19 @@ export default async function ItemPage({
           </p>
         )}
       </div>
-      <PriceChart history={history} store={item.merchant_name} />
+      <PriceChart runs={runs} store={item.merchant_name} upcomingFrom={upcoming[0]?.valid_from ?? null} />
       {/* The same points as the chart, as dates you can read — a flyer
           history is a handful of sale windows, not a continuous line. */}
-      {history.length >= 2 && (
+      {runs.length >= 2 && (
         <ul className="mt-3 card-soft divide-y divide-line">
-          {[...history].reverse().map((p) => {
-            const current = p.valid_from === item.valid_from && p.valid_to === item.valid_to;
+          {[...runs].reverse().map((p) => {
+            /* The run covering today, rather than the row matching this
+               item's own window: after merging, the deal you're looking
+               at is usually part of a longer run, and marking the raw
+               window put "now" on whichever row happened to match —
+               which, with a 4-week flyer, was the OLDEST row. */
+            const current = p.valid_from <= todayKey && p.valid_to >= todayKey;
+            const future = isUpcoming(p);
             return (
               <li key={`${p.valid_from}-${p.valid_to}`} className="flex items-center justify-between gap-3 px-4 py-2.5 text-[13px]">
                 <span className="text-ink-soft">
@@ -261,8 +304,11 @@ export default async function ItemPage({
                   {current && (
                     <span className="ml-2 rounded-pill bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent-dark">now</span>
                   )}
+                  {future && (
+                    <span className="ml-2 rounded-pill bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent-dark">next week</span>
+                  )}
                 </span>
-                <span className={`font-mono tabular-nums font-semibold ${current ? "text-accent" : "text-ink"}`}>
+                <span className={`font-mono tabular-nums font-semibold ${current ? "text-accent-dark" : future ? "text-ink-soft" : "text-ink"}`}>
                   ${p.price.toFixed(2)}
                 </span>
               </li>

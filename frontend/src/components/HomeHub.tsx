@@ -10,6 +10,7 @@ import {
   type Merchant,
 } from "@/lib/api";
 import ActionCard from "@/components/ActionCard";
+import { IconCart, IconReceipt, IconSettings } from "@/components/icons";
 import DealCard from "@/components/DealCard";
 import { FRESH_CATEGORIES } from "@/components/CategoryBrowser";
 import GlassCard, { NUDGE_BANNER_SURFACE } from "@/components/GlassCard";
@@ -68,6 +69,7 @@ export default function HomeHub() {
   const [total, setTotal] = useState<number | null>(null);
   const [deals, setDeals] = useState<BestDeal[]>([]);
   const [merchants, setMerchants] = useState<Merchant[]>([]);
+  const [merchantsLoaded, setMerchantsLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -81,8 +83,12 @@ export default function HomeHub() {
   const isSignedInNoPostal = !!user && !user.postal_code;
   const isSignedInBlocked = isSignedInNoStores || isSignedInNoPostal;
 
+  // `merchants` is [] both before the fetch lands and when the area
+  // genuinely has none, and "0 stores" is a claim we can only make once
+  // we know — same conflation as reporting an unreachable session as
+  // signed out. Until then the sentence simply omits the count.
   const storeCount = user ? user.merchants.length : merchants.length;
-  const postalCode = user?.postal_code ?? meta?.default_postal_code ?? null;
+  const knowStoreCount = user ? true : merchantsLoaded;
 
   // Anonymous visitors browse the example area; its store list is the
   // only way to say "across N stores" for them.
@@ -91,7 +97,10 @@ export default function HomeHub() {
     let cancelled = false;
     fetchMerchants()
       .then((m) => {
-        if (!cancelled) setMerchants(m);
+        if (!cancelled) {
+          setMerchants(m);
+          setMerchantsLoaded(true);
+        }
       })
       .catch(() => {});
     return () => {
@@ -172,18 +181,17 @@ export default function HomeHub() {
     prevScrapeRunning.current = scrapeRunning;
   }, [scrapeRunning]);
 
+  /* Only the states worth interrupting for. The line used to read out a
+     tally — "530 deals across 12 stores near K2C3G1." — under every
+     visit, which is a statistic about the database rather than anything
+     to do; the same numbers are on the deals page beside the filters
+     that change them. Nothing renders when there's nothing wrong. */
   const contextLine = (() => {
-    if (sessionLoading || (loading && total === null)) return "Counting what's on sale near you…";
-    if (isSignedInNoPostal) return "Add a postal code and we'll start tracking flyers near you.";
-    if (isSignedInNoStores) return "Pick the stores you shop at and we'll pull their flyers.";
-    if (error) return "We couldn't reach the deals service just now.";
-    const dealPart =
-      total !== null
-        ? `${total.toLocaleString()} deal${total === 1 ? "" : "s"}`
-        : "Live flyer deals";
-    const storePart = storeCount > 0 ? ` across ${storeCount} store${storeCount === 1 ? "" : "s"}` : "";
-    const postalPart = postalCode ? ` near ${postalCode}` : "";
-    return `${dealPart}${storePart}${postalPart}.`;
+    if (sessionLoading) return null;
+    if (isSignedInNoPostal) return "Add a postal code to see deals near you.";
+    if (isSignedInNoStores) return "Pick the stores you shop at to see their deals.";
+    if (error) return "Deals are unavailable right now.";
+    return null;
   })();
 
   return (
@@ -258,46 +266,51 @@ export default function HomeHub() {
           <h2 className="font-display text-[clamp(1.6rem,3.2vw,2.4rem)] text-ink leading-tight">
             What would you like to do?
           </h2>
-          <p className="text-[15px] text-ink-soft mt-2">{contextLine}</p>
+          {contextLine && <p className="text-[15px] text-ink-soft mt-2">{contextLine}</p>}
         </header>
 
         {/* ── The three actions ──────────────────────────────────── */}
         {/* Postal code and stores used to be two equal tiles here, but
             they're really one job — the account's scope — so they're one
-            tile now, twice the width of the other two (sm:col-span-2
-            reaches full-row on its own at the 2-column step, then sits
-            beside the other two once wide: opens a 4th column). First,
-            since it's the one thing worth checking before the other two
-            mean anything — "browse deals" against no stores is just the
-            example area. */}
-        <div className="shrink-0 grid grid-cols-1 sm:grid-cols-2 wide:grid-cols-4 gap-5">
+            tile now. First, since it's the one thing worth checking
+            before the other two mean anything — "browse deals" against
+            no stores is just the example area.
+
+            Three EQUAL columns once there's room for them. It used to
+            take a double-width column out of a 4-column grid, which
+            made the row read as one big tile and two leftovers rather
+            than as three choices. The sm: span is only there because a
+            2-column grid can't hold three tiles without an orphan. */}
+        <div className="shrink-0 grid grid-cols-1 sm:grid-cols-2 wide:grid-cols-3 gap-5">
           <ActionCard
             href={user ? "/settings" : "/login"}
-            icon="⚙️"
+            icon={<IconSettings />}
             title="Manage account"
             compactWhenShort
-            wrapperClassName="sm:col-span-2"
+            wrapperClassName="sm:col-span-2 wide:col-span-1"
             detail={
               user
-                ? "📍 Set your postal code and 🏬 select the stores you shop at."
-                : `📍 You're browsing ${
+                ? "Your postal code and the stores you shop at."
+                : `Browsing ${
                     meta?.default_postal_code ? `the example area (${meta.default_postal_code})` : "the example area"
-                  } · 🏬 ${storeCount} example ${storeCount === 1 ? "store" : "stores"}. Sign in to use your own.`
+                  }${
+                    knowStoreCount ? `, ${storeCount} ${storeCount === 1 ? "store" : "stores"}` : ""
+                  }. Sign in to use your own.`
             }
           />
           <ActionCard
             href="/deals"
-            icon="🛒"
+            icon={<IconCart />}
             title="Browse deals"
             compactWhenShort
-            detail="Every deal near you, grouped by category so you can pick a shelf first."
+            detail="Everything on sale near you, by category."
           />
           <ActionCard
             href="/list"
-            icon="🧾"
+            icon={<IconReceipt />}
             title="Plan a shopping trip"
             compactWhenShort
-            detail="Make a shopping list and we'll work out the cheapest way to buy it."
+            detail="Build a list, get the cheapest way to buy it."
           />
         </div>
 
@@ -309,11 +322,6 @@ export default function HomeHub() {
                 <h3 className="font-display text-[22px] text-ink leading-tight">
                   This week&apos;s best
                 </h3>
-                <p className="text-[13px] text-ink-soft mt-1">
-                  {deals.some((d) => d.drop_pct !== null)
-                    ? "Fresh food priced furthest below its usual flyer price."
-                    : "A few fresh deals on sale right now."}
-                </p>
               </div>
               <Link
                 href="/deals"

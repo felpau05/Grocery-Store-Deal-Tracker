@@ -21,9 +21,11 @@ from .cart import (
 from .connection import get_conn, get_cursor
 from .items import apply_classifications, upsert_item_embedding
 from .queries import (
+    best_deals,
     facet_counts,
     get_item,
     get_price_history,
+    get_product_history,
     list_categories,
     list_merchants,
     search_items,
@@ -48,8 +50,10 @@ __all__ = [
     "upsert_item_embedding",
     "search_items",
     "facet_counts",
+    "best_deals",
     "get_item",
     "get_price_history",
+    "get_product_history",
     "list_categories",
     "list_merchants",
     "ensure_user_tables",

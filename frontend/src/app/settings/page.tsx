@@ -7,7 +7,7 @@ import { fetchAvailableMerchants, type AvailableMerchant } from "@/lib/api";
 import { useAccount } from "@/lib/account";
 import { useToast } from "@/lib/toast";
 import { toggleChip } from "@/lib/toggleChip";
-import { BTN_NUDGE_CTA, BTN_PRIMARY_CTA, BTN_SECONDARY } from "@/lib/button";
+import { BTN_FOLLOWUP_CTA, BTN_NUDGE_CTA, BTN_PRIMARY_CTA, BTN_SECONDARY } from "@/lib/button";
 import BackLink from "@/components/BackLink";
 import GlassCard, { GLASS_SURFACE_DENSE, NUDGE_BANNER_SURFACE } from "@/components/GlassCard";
 import { Segmented } from "@/components/DealsSidebar";
@@ -42,8 +42,14 @@ function CheckGlyph() {
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { user, loading, scrapeStatus, signOut, updatePrefs } = useAccount();
+  const { user, loading, sessionError, scrapeStatus, signOut, retrySession, updatePrefs } = useAccount();
   const { toast } = useToast();
+
+  // Set the moment "Sign out" is pressed. signOut() clears `user` right
+  // away but the route change to "/" takes a beat, and without this the
+  // page re-rendered as signed out in between — flashing "Settings are
+  // private" at someone who is on their way out.
+  const [signingOut, setSigningOut] = useState(false);
 
   const [postal, setPostal] = useState("");
   const [stores, setStores] = useState<AvailableMerchant[] | null>(null);
@@ -197,12 +203,34 @@ export default function SettingsPage() {
     );
   }, [stores, groceryOnly, storeFilter, selected]);
 
+  if (signingOut) return null;
+
   if (loading) {
     return (
       <main className="max-w-3xl mx-auto px-6 py-14">
         {/* No card here — raw page gradient, so --color-ink, not
             --color-ink-soft. */}
         <p className="text-sm text-ink animate-pulse">Checking your session…</p>
+      </main>
+    );
+  }
+
+  // Unreachable /me, not a missing session: we still hold a token, the
+  // provider is keeping it, and "sign in again" is the one action that
+  // cannot work while the auth endpoint is the thing that's down. Same
+  // shape as the "Deals unavailable" card on /.
+  if (!user && sessionError) {
+    return (
+      <main className="max-w-md mx-auto px-6 py-14">
+        <GlassCard surfaceClassName={`${NUDGE_BANNER_SURFACE} p-8 text-center`}>
+          <h1 className="font-display text-2xl text-ink">Can&apos;t reach your account right now</h1>
+          <p className="text-[14px] text-ink-soft mt-2.5 leading-relaxed">
+            Your session is fine — we just can&apos;t load it. This usually clears on its own.
+          </p>
+          <button onClick={retrySession} className={BTN_FOLLOWUP_CTA}>
+            Try again
+          </button>
+        </GlassCard>
       </main>
     );
   }
@@ -264,9 +292,12 @@ export default function SettingsPage() {
         </div>
         <button
           onClick={() => {
+            setSigningOut(true);
+            // replace, not push: Back shouldn't return to a settings page
+            // that no longer has an account behind it.
+            router.replace("/");
             signOut();
             toast("Signed out");
-            router.push("/");
           }}
           className={BTN_SECONDARY}
         >
@@ -535,21 +566,11 @@ export default function SettingsPage() {
                 )}
               </p>
             </div>
-            {/* Back, not "View my deals". Saving stores is something you
-                do on the way to somewhere — often from the deals page
-                itself — so the onward move is the way you came, not a
-                fixed destination that might be where you already were.
-                Styled as the panel's CTA (BackLink's own quiet text
-                treatment is deliberately too light for this slot) but
-                with BackLink's behaviour: history back, /deals only as
-                the fallback for a direct visit. */}
-            <button
-              onClick={() =>
-                window.history.length > 1 ? router.back() : router.push("/deals")
-              }
-              className={BTN_NUDGE_CTA}
-            >
-              ← Back
+            {/* Always /deals, never history back: right after signing in
+                (Google especially) the previous entry is the sign-in flow,
+                so "back" dropped you onto the login screen again. */}
+            <button onClick={() => router.push("/deals")} className={BTN_NUDGE_CTA}>
+              Deals →
             </button>
           </div>
         )}
@@ -564,10 +585,10 @@ export default function SettingsPage() {
           </span>
           <span className="flex items-center gap-4">
             {/* The always-available version of the same move, for
-                someone who changed nothing. BackLink rather than a
-                hand-rolled link: it already carries the chevron, the
-                quiet treatment and the history-with-fallback logic. */}
-            {user.merchants.length > 0 && <BackLink label="Back" />}
+                someone who changed nothing. Fixed href for the same
+                reason as the saved banner's button: history back can
+                land on the sign-in flow. */}
+            {user.merchants.length > 0 && <BackLink href="/deals" label="Back to deals" />}
             <GlassCard
               as="button"
               onClick={onSave}

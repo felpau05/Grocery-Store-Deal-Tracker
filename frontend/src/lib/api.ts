@@ -294,6 +294,8 @@ type DealFilterParams = {
   postalCode?: string;
   status?: DealStatus;
   priceUnits?: PriceUnit[];
+  /** Only deals still running N days from now (0 = not already expired) */
+  expiresAfterDays?: number;
   /** Only deals ending within N days (0 = ends today) */
   expiresWithinDays?: number;
   priceMin?: number;
@@ -309,6 +311,9 @@ function dealFilterParams(params: DealFilterParams): URLSearchParams {
   if (params.postalCode) search.set("postal_code", params.postalCode);
   search.set("status", params.status ?? "active");
   (params.priceUnits ?? []).forEach((u) => search.append("price_units", u));
+  if (params.expiresAfterDays !== undefined) {
+    search.set("expires_after_days", String(params.expiresAfterDays));
+  }
   if (params.expiresWithinDays !== undefined) {
     search.set("expires_within_days", String(params.expiresWithinDays));
   }

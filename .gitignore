@@ -87,3 +87,5 @@ storybook-static
 
 # WSL drops these alongside files copied in from Windows
 *:Zone.Identifier
+
+screenshots/

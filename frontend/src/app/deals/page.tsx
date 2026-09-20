@@ -28,6 +28,20 @@ const PAGE_SIZE = 24;
 
 const PAGE_WINDOW = 2; // pages shown on either side of the current one
 
+/** Prefix for the per-tab grid scroll offset; the query string is
+ *  appended so each filter set remembers its own place. */
+const SCROLL_KEY = "deals-scroll:";
+
+/** One end of the "deal ends" window, read off the URL. Null (no
+ *  filter) for a missing param and for anything that isn't a
+ *  non-negative whole number of days, so a hand-mangled ?exp= widens the
+ *  results rather than sending NaN to the API. */
+function dayParam(raw: string | null): number | null {
+  if (raw === null) return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 ? n : null;
+}
+
 function Pagination({
   page,
   hasMore,
@@ -197,6 +211,9 @@ function DealsInner() {
   const [facetTotal, setFacetTotal] = useState<number | null>(null);
   const [categoryCounts, setCategoryCounts] = useState<Map<string, number>>(new Map());
   const [merchantCounts, setMerchantCounts] = useState<Map<number, number>>(new Map());
+  // Facets only list stores that HAVE deals, so an absent id is either
+  // "0 this week" or "we haven't asked yet" — this is which.
+  const [countsKnown, setCountsKnown] = useState(false);
 
   // Advanced filters — status, expiry window, price range. Initialized
   // from the URL like the other filters so they're bookmarkable.
@@ -204,10 +221,12 @@ function DealsInner() {
     const s = searchParams.get("status");
     return s === "active" || s === "upcoming" ? s : "all";
   });
-  const [expDays, setExpDays] = useState<number | null>(() => {
-    const e = Number(searchParams.get("exp"));
-    return searchParams.get("exp") !== null && Number.isInteger(e) && e >= 0 ? e : null;
-  });
+  // The two ends of the "deal ends" window, each null when that end is
+  // open: `expAfter` is the earliest last-day (?expa=) and `expDays` the
+  // latest (?exp=). Two numbers rather than one because the rail's
+  // slider now has a thumb on each end.
+  const [expDays, setExpDays] = useState<number | null>(() => dayParam(searchParams.get("exp")));
+  const [expAfter, setExpAfter] = useState<number | null>(() => dayParam(searchParams.get("expa")));
   const [priceMin, setPriceMin] = useState(searchParams.get("pmin") ?? "");
   const [priceMax, setPriceMax] = useState(searchParams.get("pmax") ?? "");
 
@@ -221,7 +240,8 @@ function DealsInner() {
   // price-range/priced-by group.
   const advancedCount =
     (status !== "all" ? 1 : 0) +
-    (expDays !== null ? 1 : 0) +
+    // One filter, not two — both thumbs belong to the same slider.
+    (expDays !== null || expAfter !== null ? 1 : 0) +
     (priceMin !== "" ? 1 : 0) +
     (priceMax !== "" ? 1 : 0) +
     (priceUnits.length > 0 ? 1 : 0);
@@ -234,15 +254,19 @@ function DealsInner() {
 
   // Category-first browsing. With nothing narrowing the results this
   // page opens on category TILES, not on 2,249 cards — "the wall of all
-  // the items" was the single complaint that started this rewrite. The
-  // instant anything narrows the set (a search, a category, one of the
-  // advanced filters) it is the ordinary grid again: showing tiles over
-  // an active filter would misrepresent what the filter did.
+  // the items" was the single complaint that started this rewrite.
   //
-  // A store selection deliberately does NOT count: it rescopes the
-  // counts on the tiles rather than replacing them, which is the same
-  // "browse this store's shelves" gesture one level up.
-  const narrowed = !!query || selectedCategories.length > 0 || advancedCount > 0;
+  // Only a SEARCH or a picked CATEGORY replaces the tiles with the grid:
+  // both name a set of items directly, so the tiles have nothing left to
+  // do. The rail's filters (and the store selection) do not — they
+  // rescope the counts ON the tiles rather than replacing them, which is
+  // the same "browse these shelves" gesture one level up. Ticking a
+  // filter used to dump you straight into the flat grid, which took the
+  // category browser away exactly when you were still browsing;
+  // `categoryCounts` and `facetTotal` come from a facets request that
+  // already carries every filter, so the tiles tell the truth about
+  // what's left under one.
+  const narrowed = !!query || selectedCategories.length > 0;
   const showTiles = !narrowed && !showEverything;
 
   const browseLabel = query
@@ -365,7 +389,7 @@ function DealsInner() {
   // viewport anywhere.
   useEffect(() => {
     setPage(1);
-  }, [query, selectedCategories, selectedMerchantIds, sort, sortDir, priceUnits, status, expDays, priceMin, priceMax]);
+  }, [query, selectedCategories, selectedMerchantIds, sort, sortDir, priceUnits, status, expDays, expAfter, priceMin, priceMax]);
 
   // Keep filters in the URL (?q=beef&categories=meat,dairy&merchants=1,2)
   // so the search is bookmarkable and survives back-navigation from
@@ -377,6 +401,7 @@ function DealsInner() {
     if (selectedMerchantIds.length > 0) params.set("merchants", selectedMerchantIds.join(","));
     if (status !== "all") params.set("status", status);
     if (expDays !== null) params.set("exp", String(expDays));
+    if (expAfter !== null) params.set("expa", String(expAfter));
     if (priceMin) params.set("pmin", priceMin);
     if (priceMax) params.set("pmax", priceMax);
     if (sort !== "price") params.set("sort", sort);
@@ -386,7 +411,58 @@ function DealsInner() {
     if (showEverything) params.set("all", "1");
     const qs = params.toString();
     window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
-  }, [query, selectedCategories, selectedMerchantIds, status, expDays, priceMin, priceMax, sort, sortDir, priceUnits, page, showEverything]);
+  }, [query, selectedCategories, selectedMerchantIds, status, expDays, expAfter, priceMin, priceMax, sort, sortDir, priceUnits, page, showEverything]);
+
+  // ── Grid scroll position across Back ────────────────────────────────
+  // At `sidebar:` the grid is its own `overflow-y-auto` region and the
+  // DOCUMENT never scrolls, so Next's scroll restoration — which restores
+  // `window.scrollY` — has nothing to restore and Back from /item/[id]
+  // lands you at the top of a grid you were halfway down. The filters
+  // survive because they're in the URL; the offset can't go there (it
+  // has no business in a shared link) and the URL sync above uses
+  // `replaceState` anyway, so there's no history entry to hang it on.
+  //
+  // sessionStorage instead: per-tab, which is the scope a user expects
+  // from Back, and keyed by the query string so a different filter set
+  // doesn't inherit an offset from the last one.
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const restoredFor = useRef<string | null>(null);
+
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el || showTiles) return;
+    let frame = 0;
+    const onScroll = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        // Throws in some privacy modes; a lost scroll offset is not
+        // worth taking the page down over.
+        try {
+          sessionStorage.setItem(`${SCROLL_KEY}${window.location.search}`, String(el.scrollTop));
+        } catch {}
+      });
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [showTiles]);
+
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el || showTiles || loading || deals.length === 0) return;
+    const key = `${SCROLL_KEY}${window.location.search}`;
+    // Once per filter set: re-running on every render would fight the
+    // user's own scrolling.
+    if (restoredFor.current === key) return;
+    restoredFor.current = key;
+    try {
+      const saved = Number(sessionStorage.getItem(key));
+      if (saved > 0) el.scrollTop = saved;
+    } catch {}
+  }, [showTiles, loading, deals.length]);
 
   useEffect(() => {
     // Wait for the session to resolve first: until then `user` is null,
@@ -424,6 +500,7 @@ function DealsInner() {
         sortDir,
         priceUnits: priceUnits.length > 0 ? priceUnits : undefined,
         expiresWithinDays: expDays ?? undefined,
+        expiresAfterDays: expAfter ?? undefined,
         priceMin: Number.isFinite(min) && min >= 0 ? min : undefined,
         priceMax: Number.isFinite(max) && max >= 0 ? max : undefined,
         limit: PAGE_SIZE,
@@ -451,7 +528,7 @@ function DealsInner() {
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [sessionLoading, query, selectedCategories, selectedMerchantIds, merchantIds, effectivePostal, sort, sortDir, priceUnits, status, expDays, priceMin, priceMax, page, reloadKey, facetTotal, isSignedInBlocked]);
+  }, [sessionLoading, query, selectedCategories, selectedMerchantIds, merchantIds, effectivePostal, sort, sortDir, priceUnits, status, expDays, expAfter, priceMin, priceMax, page, reloadKey, facetTotal, isSignedInBlocked]);
 
   // Facets: total count + per-category/per-store item counts. Independent
   // of page/sort, so it only refetches when a real filter changes.
@@ -463,39 +540,62 @@ function DealsInner() {
       setFacetTotal(0);
       setCategoryCounts(new Map());
       setMerchantCounts(new Map());
+      setCountsKnown(true);
       return;
     }
     let cancelled = false;
     const min = parseFloat(priceMin);
     const max = parseFloat(priceMax);
-    fetchDealFacets({
+    const base = {
       q: query || undefined,
       categories: selectedCategories.length > 0 ? selectedCategories : undefined,
-      merchantIds: selectedMerchantIds.length > 0 ? selectedMerchantIds : merchantIds ?? undefined,
       postalCode: effectivePostal,
       status,
       priceUnits: priceUnits.length > 0 ? priceUnits : undefined,
       expiresWithinDays: expDays ?? undefined,
+      expiresAfterDays: expAfter ?? undefined,
       priceMin: Number.isFinite(min) && min >= 0 ? min : undefined,
       priceMax: Number.isFinite(max) && max >= 0 ? max : undefined,
-    })
-      .then((facets) => {
+    };
+    // What's actually showing: every filter, store selection included.
+    // Drives the total and the category counts.
+    const shown = fetchDealFacets({
+      ...base,
+      merchantIds: selectedMerchantIds.length > 0 ? selectedMerchantIds : merchantIds ?? undefined,
+    });
+    // The STORE counts deliberately ignore the store selection. A facet
+    // shouldn't filter itself: scoped to the selection, ticking Metro
+    // left "All stores" reading 850 instead of the real 4,119 and blanked
+    // the count on every other store, so the rail could no longer answer
+    // the one question it exists to answer — how much is at each store,
+    // and how much there is in total. Same call when nothing is selected,
+    // so the common case still costs one request.
+    const forStores =
+      selectedMerchantIds.length > 0
+        ? fetchDealFacets({ ...base, merchantIds: merchantIds ?? undefined })
+        : shown;
+    Promise.all([shown, forStores])
+      .then(([facets, storeFacets]) => {
         // A stale response from a since-superseded scope must never
         // overwrite the counts for whatever's actually showing now.
         if (cancelled) return;
         setFacetTotal(facets.total);
         setCategoryCounts(new Map(facets.categories.map((c) => [c.name, c.count])));
-        setMerchantCounts(new Map(facets.merchants.map((m) => [m.id, m.count])));
+        setMerchantCounts(new Map(storeFacets.merchants.map((m) => [m.id, m.count])));
+        setCountsKnown(true);
       })
       .catch(() => {
         // Counts are a nice-to-have — leave pills unlabeled rather than
         // surface a second error state for a non-essential fetch.
-        if (!cancelled) setFacetTotal(null);
+        if (!cancelled) {
+          setFacetTotal(null);
+          setCountsKnown(false);
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [sessionLoading, query, selectedCategories, selectedMerchantIds, merchantIds, effectivePostal, status, priceUnits, expDays, priceMin, priceMax, reloadKey, isSignedInBlocked]);
+  }, [sessionLoading, query, selectedCategories, selectedMerchantIds, merchantIds, effectivePostal, status, priceUnits, expDays, expAfter, priceMin, priceMax, reloadKey, isSignedInBlocked]);
 
   // Per-category average $/unit across visible deals, for the deal-o-meter.
   // Needs 2+ priced items in a category — comparing an item to itself is noise.
@@ -541,18 +641,6 @@ function DealsInner() {
         <h1 className="font-display text-[clamp(1.5rem,3vw,2.1rem)] text-ink leading-tight">
           Browse deals
         </h1>
-        <p className="text-[14px] text-ink-soft mt-1.5">
-          {scopeStoreCount > 0 ? (
-            <>
-              Everything on sale across{" "}
-              <span className="font-mono">{scopeStoreCount}</span> store
-              {scopeStoreCount === 1 ? "" : "s"}
-              {scopePostal ? <> near <span className="font-mono">{scopePostal}</span></> : null}.
-            </>
-          ) : (
-            "Everything on sale near you."
-          )}
-        </p>
       </header>
 
       {/* Two columns, filters always the left one: the sidebar is a fixed
@@ -625,6 +713,7 @@ function DealsInner() {
             selectedMerchantIds={selectedMerchantIds}
             setSelectedMerchantIds={setSelectedMerchantIds}
             merchantCounts={merchantCounts}
+            countsKnown={countsKnown}
             sort={sort}
             setSort={setSort}
             sortDir={sortDir}
@@ -635,6 +724,8 @@ function DealsInner() {
             setStatus={setStatus}
             expDays={expDays}
             setExpDays={setExpDays}
+            expAfter={expAfter}
+            setExpAfter={setExpAfter}
             priceMin={priceMin}
             setPriceMin={setPriceMin}
             priceMax={priceMax}
@@ -649,6 +740,7 @@ function DealsInner() {
               // initial state, so clearing now genuinely returns to it.
               setStatus("all");
               setExpDays(null);
+              setExpAfter(null);
               setPriceUnits([]);
               setPriceMin("");
               setPriceMax("");
@@ -755,7 +847,7 @@ function DealsInner() {
             <nav aria-label="Breadcrumb" className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={backToCategories}
-                className="font-semibold text-accent hover:text-accent-dark transition-colors"
+                className="font-semibold text-accent-dark hover:text-accent-deep transition-colors"
               >
                 ← All categories
               </button>
@@ -803,6 +895,7 @@ function DealsInner() {
             section is its own scroll area, so this is just a flex column
             for it to fill. */}
         <div
+          ref={gridRef}
           className={
             showTiles
               ? "sidebar:flex-1 sidebar:min-h-0 sidebar:flex sidebar:flex-col"
@@ -875,7 +968,7 @@ function DealsInner() {
                     <p className="text-ink mt-4 max-w-md mx-auto">
                       Nothing matches in <span className="font-bold text-ink">your {merchantIds?.length} stores</span>.
                       Try a broader term, or{" "}
-                      <Link href="/settings" className="font-semibold text-accent underline hover:text-accent-dark transition-colors">
+                      <Link href="/settings" className="font-semibold text-accent-dark underline hover:text-accent-deep transition-colors">
                         add more stores
                       </Link>.
                     </p>
@@ -889,6 +982,7 @@ function DealsInner() {
                         setSelectedCategories([]);
                         setStatus("all");
                         setExpDays(null);
+                        setExpAfter(null);
                         setPriceMin("");
                         setPriceMax("");
                         // priceUnits is part of `advancedCount`, which is

@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import db
 from classifier.backfill import start_backfill_scheduler, stop_backfill_scheduler
 from config import Config
+from maintenance.prune import start_prune_scheduler, stop_prune_scheduler
 from routes import auth, cart, deals, optimize, users
 
 
@@ -21,7 +22,10 @@ async def lifespan(app: FastAPI):
     # classifier/backfill.py for why this is async/decoupled rather
     # than inline in the scrape.
     start_backfill_scheduler()
+    # Weekly retention at Config.HISTORY_WEEKS — see maintenance/prune.py.
+    start_prune_scheduler()
     yield
+    stop_prune_scheduler()
     stop_backfill_scheduler()
 
 

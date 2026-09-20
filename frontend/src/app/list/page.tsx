@@ -9,8 +9,9 @@ import { BTN_FOLLOWUP_CTA, BTN_NUDGE_CTA, BTN_SECONDARY } from "@/lib/button";
 import { CHIP_QUIET_LIGHT, CHIP_SOFT } from "@/lib/chip";
 import { priceTrip, sourceDealsOf, useOptimize } from "@/lib/hooks";
 import { formatSavedDate, tripName, useTrips, type Trip } from "@/lib/trips";
-import { useToast } from "@/lib/toast";
+import { useToast, UNDO_DURATION_LONG } from "@/lib/toast";
 import ActionCard from "@/components/ActionCard";
+import { IconList, IconReceipt } from "@/components/icons";
 import BackLink from "@/components/BackLink";
 import CountUp from "@/components/CountUp";
 import GlassCard, { GLASS_SURFACE_DENSE, NUDGE_BANNER_SURFACE } from "@/components/GlassCard";
@@ -96,18 +97,36 @@ function TrashIcon({ className = "w-4 h-4" }: { className?: string }) {
 }
 
 /** Deletes a trip with an Undo toast — the same outcome from the trips
- *  list and from inside the trip. */
+ *  list and from inside the trip.
+ *
+ *  The toast names what was lost, not just the trip: a trip is a list
+ *  someone built plus a costing someone waited for, and "Deleted
+ *  \"Shopping Trip 1\"" is the same sentence whether that was one item
+ *  or twenty. It also gets the long undo window — this is the only
+ *  guard on the action. */
 function useDeleteTrip() {
   const { removeTrip, restoreTrip } = useTrips();
   const { toast } = useToast();
   return (trip: Trip) => {
     const removed = removeTrip(trip.id);
     if (removed) {
-      toast(`Deleted "${tripName(removed)}"`, {
+      toast(`Deleted "${tripName(removed)}"${describeLoss(removed)}`, {
         action: { label: "Undo", onClick: () => restoreTrip(removed) },
+        duration: UNDO_DURATION_LONG,
       });
     }
   };
+}
+
+/** " — 5 items, $16.92", dropping either half when we don't have it.
+ *  The cost is only quoted when the saved receipts still match the
+ *  items; a stale total is worse than no total. */
+function describeLoss(trip: Trip): string {
+  const n = trip.items.length;
+  if (n === 0) return "";
+  const parts = [`${n} ${n === 1 ? "item" : "items"}`];
+  if (trip.totalCost > 0 && isPriced(trip)) parts.push(`$${trip.totalCost.toFixed(2)}`);
+  return ` — ${parts.join(", ")}`;
 }
 
 // ── My trips ──────────────────────────────────────────────────────────
@@ -160,7 +179,7 @@ function MyTrips() {
         <p className="text-sm text-ink-soft animate-pulse">Loading your shopping trips…</p>
       ) : trips.length === 0 ? (
         <div className="max-w-md">
-          <ActionCard href="/list?trip=new" icon="📝" title="New shopping trip" detail="Nothing saved yet." cta="Start →" />
+          <ActionCard href="/list?trip=new" icon={<IconList />} title="New shopping trip" detail="Nothing saved yet." cta="Start" />
         </div>
       ) : (
         <ul
@@ -213,29 +232,46 @@ function MyTrips() {
                 >
                   {current && <span className="w-2.5 h-2.5 rounded-full bg-accent" />}
                 </button>
-                <Link href={`/list?trip=${encodeURIComponent(trip.id)}`} className="flex-1 min-w-0 pl-3 pr-2 py-4 group">
-                  <span className="block font-display text-[16px] text-ink truncate group-hover:text-accent transition-colors">
-                    {tripName(trip)}
+                {/* Two facts under the name, and the money on its own
+                    at the right. Four middot-joined facts on one line
+                    ("Sep 15 · 3 items · $8.07 · 3 stores") read as one
+                    crammed string — and the total, the thing you compare
+                    trips BY, was buried in the middle of it. */}
+                <Link
+                  href={`/list?trip=${encodeURIComponent(trip.id)}`}
+                  className="flex-1 min-w-0 flex items-center gap-3 pl-3 pr-2 py-4 group"
+                >
+                  <span className="flex-1 min-w-0">
+                    <span className="block font-display text-[16px] text-ink truncate group-hover:text-accent transition-colors">
+                      {tripName(trip)}
+                    </span>
+                    <span className="block text-[12px] text-ink-muted mt-1">
+                      {formatSavedDate(trip.updatedAt)} ·{" "}
+                      <span className="font-mono tabular-nums">{trip.items.length}</span>{" "}
+                      {trip.items.length === 1 ? "item" : "items"}
+                    </span>
                   </span>
-                  <span className="block text-[12px] text-ink-muted mt-1">
-                    {formatSavedDate(trip.updatedAt)} ·{" "}
-                    <span className="font-mono tabular-nums">{trip.items.length}</span>{" "}
-                    {trip.items.length === 1 ? "item" : "items"}
-                    {busy ? (
-                      <>
-                        {" "}· <span className="inline-block w-20 h-3 align-middle rounded-pill bg-surface-3 animate-pulse" aria-label="Pricing" />
-                      </>
-                    ) : (
-                      trip.stops > 0 &&
-                      trip.items.length > 0 && (
-                        <>
-                          {" "}· <span className="font-mono tabular-nums">${trip.totalCost.toFixed(2)}</span> ·{" "}
+                  {busy ? (
+                    /* Shaped like the figure it becomes, so the card
+                       doesn't jump when the price lands. */
+                    <span className="shrink-0 text-right" aria-label="Pricing">
+                      <span className="block ml-auto w-14 h-3.5 rounded-pill bg-surface-3 animate-pulse" />
+                      <span className="block ml-auto mt-1.5 w-10 h-2.5 rounded-pill bg-surface-2 animate-pulse" />
+                    </span>
+                  ) : (
+                    trip.stops > 0 &&
+                    trip.items.length > 0 && (
+                      <span className="shrink-0 text-right">
+                        <span className="block font-mono tabular-nums text-[15px] font-semibold text-accent-dark leading-none">
+                          ${trip.totalCost.toFixed(2)}
+                        </span>
+                        <span className="block text-[11px] text-ink-muted mt-1.5">
                           <span className="font-mono tabular-nums">{trip.stops}</span>{" "}
                           {trip.stops === 1 ? "store" : "stores"}
-                        </>
-                      )
-                    )}
-                  </span>
+                        </span>
+                      </span>
+                    )
+                  )}
                 </Link>
                 <button
                   type="button"
@@ -415,6 +451,10 @@ function TripView({ tripParam }: { tripParam: string }) {
     if (removed.length > 0) {
       toast(`Cleared ${removed.length} ${removed.length === 1 ? "item" : "items"}`, {
         action: { label: "Undo", onClick: () => restoreToTrip(trip!.id, removed) },
+        // Emptying the list is as expensive to rebuild as deleting it.
+        // Single-item removal just above stays at the default — one item
+        // is a click to re-add, and a 12 s toast there would be noise.
+        duration: UNDO_DURATION_LONG,
       });
     }
   }
@@ -696,7 +736,7 @@ function TripView({ tripParam }: { tripParam: string }) {
 
         {!hasItems && !error && (
           <div className="hidden wide:flex h-full flex-col items-center justify-center gap-3 rounded-card border border-dashed border-line-strong bg-surface/50 px-6 py-10 text-center">
-            <span aria-hidden className="text-[30px] leading-none opacity-60">🧾</span>
+            <IconReceipt size={30} className="text-ink-muted" />
             <p className="text-sm text-ink-soft max-w-xs">Add items to see the cheapest way to shop them.</p>
           </div>
         )}

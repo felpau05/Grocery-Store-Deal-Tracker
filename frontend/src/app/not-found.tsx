@@ -1,24 +1,29 @@
 import Link from "next/link";
 import GlassCard, { GLASS_SURFACE_DENSE } from "@/components/GlassCard";
+import { BTN_FOLLOWUP_CTA, BTN_SECONDARY } from "@/lib/button";
 
-/** Styled 404 — dead item links (expired deals get pruned) land here. */
+/** The global 404: any address that matches no route. A dead ITEM link is
+ *  a different thing and has its own boundary at `item/[id]/not-found.tsx`
+ *  — this one can't claim a deal expired, because whatever the visitor
+ *  typed was very likely never a deal. */
 export default function NotFound() {
   return (
     <main className="max-w-md mx-auto px-6 py-20">
       <GlassCard surfaceClassName={`${GLASS_SURFACE_DENSE} p-8 text-center`}>
-        <h1 className="font-display text-2xl text-ink">This deal is gone</h1>
+        <h1 className="font-display text-2xl text-ink">This page doesn&apos;t exist</h1>
         <p className="text-[14px] text-ink-soft mt-2.5 leading-relaxed">
-          It probably expired and got swept out with last week&apos;s flyer. This week&apos;s deals
-          are still up.
+          The address might be mistyped, or the page may have moved.
         </p>
-        <GlassCard
-          as={Link}
-          href="/deals"
-          wrapperClassName="inline-block mt-6"
-          surfaceClassName="glow-btn inline-block px-5 py-2.5 bg-accent text-white font-display text-sm hover:bg-accent-dark transition-colors"
-        >
-          Back to this week&apos;s deals
-        </GlassCard>
+        {/* Two ways out, not one: a lost visitor usually wants the front
+            door, and the one who mistyped a deal URL wants the catalogue. */}
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
+          <Link href="/deals" className={BTN_FOLLOWUP_CTA}>
+            Browse deals
+          </Link>
+          <Link href="/" className={BTN_SECONDARY}>
+            Go home
+          </Link>
+        </div>
       </GlassCard>
     </main>
   );

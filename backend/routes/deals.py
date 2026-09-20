@@ -110,6 +110,7 @@ def list_deals(
     sort: str = Query(default="price", pattern="^(price|price_per_unit)$"),
     sort_dir: str = Query(default="asc", pattern="^(asc|desc)$"),
     price_units: list[str] | None = Query(default=None),
+    expires_after_days: int | None = Query(default=None, ge=0, le=30),
     expires_within_days: int | None = Query(default=None, ge=0, le=30),
     price_min: float | None = Query(default=None, ge=0),
     price_max: float | None = Query(default=None, ge=0),
@@ -125,6 +126,7 @@ def list_deals(
         merchant_ids=merchant_ids, postal_code=postal,
         status=status, sort=sort, sort_dir=sort_dir,
         price_units=filtered_units,
+        expires_after_days=expires_after_days,
         expires_within_days=expires_within_days,
         price_min=price_min, price_max=price_max,
         limit=limit, offset=offset,
@@ -141,6 +143,7 @@ def deal_facets(
     postal_code: str | None = Query(default=None),
     status: str = Query(default="active", pattern="^(active|upcoming|all)$"),
     price_units: list[str] | None = Query(default=None),
+    expires_after_days: int | None = Query(default=None, ge=0, le=30),
     expires_within_days: int | None = Query(default=None, ge=0, le=30),
     price_min: float | None = Query(default=None, ge=0),
     price_max: float | None = Query(default=None, ge=0),
@@ -158,6 +161,7 @@ def deal_facets(
         q=q, categories=categories, merchant_id=merchant_id, merchant_ids=merchant_ids,
         postal_code=postal,
         status=status, price_units=filtered_units,
+        expires_after_days=expires_after_days,
         expires_within_days=expires_within_days,
         price_min=price_min, price_max=price_max,
     )
@@ -168,13 +172,42 @@ def deal_facets(
     }
 
 
+@router.get("/deals/best")
+def best_deals(
+    categories: list[str] | None = Query(default=None),
+    merchant_ids: list[int] | None = Query(default=None),
+    postal_code: str | None = Query(default=None),
+    limit: int = Query(default=24, ge=1, le=100),
+):
+    """Active deals furthest below their own average flyer price over the
+    last HISTORY_WEEKS, then random active deals to fill (see
+    db.best_deals). Same region + store scope as GET /deals.
+    `drop_pct` (0-1) is null for the random fill."""
+    postal, _, merchant_ids = _effective_scope(postal_code, None, merchant_ids)
+    rows = db.best_deals(
+        categories=categories, merchant_ids=merchant_ids, postal_code=postal,
+        weeks=Config.HISTORY_WEEKS, limit=limit,
+    )
+    return [
+        {
+            **_serialize_deal(row),
+            "ref_price": round(float(row["ref_price"]), 2) if row["ref_price"] is not None else None,
+            "drop_pct": round(float(row["drop_pct"]), 4) if row["drop_pct"] is not None else None,
+        }
+        for row in rows
+    ]
+
+
 @router.get("/deals/{item_id}/history")
-def deal_history(item_id: int, days: int = Query(default=30, ge=1, le=365)):
+def deal_history(item_id: int, weeks: int = Query(default=Config.HISTORY_WEEKS, ge=1, le=52)):
     item = db.get_item(item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
 
-    history_rows = db.get_price_history(item_id, days=days)
+    # Past deals for the same product across flyers (see
+    # db.get_product_history), not this item row's own scrapes — those
+    # are one flyer's worth of one price.
+    history_rows = db.get_product_history(item, weeks=weeks)
 
     price_per_unit = _price_per_unit(
         item["price"], item["price_unit"], item["price_unit_factor"],
@@ -203,7 +236,11 @@ def deal_history(item_id: int, days: int = Query(default=30, ge=1, le=365)):
             "original_description": item.get("original_description"),
         },
         "history": [
-            {"price": _to_float(row["price"]), "scraped_at": row["scraped_at"]}
+            {
+                "price": _to_float(row["price"]),
+                "valid_from": row["valid_from"],
+                "valid_to": row["valid_to"],
+            }
             for row in history_rows
         ],
     }

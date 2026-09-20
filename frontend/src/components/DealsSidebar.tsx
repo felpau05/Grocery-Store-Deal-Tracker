@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import GlassCard, { GLASS_SURFACE_DENSE } from "@/components/GlassCard";
 import { BTN_SECONDARY } from "@/lib/button";
+import { fetchAvailableMerchants } from "@/lib/api";
+import { useAccount } from "@/lib/account";
 import type {
   Account,
   DealStatus,
@@ -18,16 +20,55 @@ const STATUSES: { id: DealStatus; label: string }[] = [
   { id: "upcoming", label: "Starting Soon" },
 ];
 
-/** Only deals whose last day falls inside the window, counted from
- *  today — "Tomorrow" is deals ending today or tomorrow (the API's
- *  expires_within_days is cumulative). Worded as "Deal ends …" because
- *  "Expires: ≤ 2 days" read as a mystery. */
-const EXPIRY_OPTIONS: { days: number | null; label: string }[] = [
-  { days: null, label: "Any time" },
+/** Stops on the "Deal ends" slider. Only deals whose LAST DAY falls
+ *  inside the window, counted from today — the API's
+ *  expires_within_days is cumulative, and valid_to is inclusive, so
+ *  `days: 0` is "today is the last day", not "already gone". Worded as
+ *  "Deal ends …" because "Expires: ≤ 2 days" read as a mystery.
+ *
+ *  The stops are evenly spaced on the track but NOT linear in days: the
+ *  first few days matter one at a time, and past that a week is the
+ *  smallest unit anyone shops by, so a 0–14 day track would spend most
+ *  of its length on windows nobody picks. The readout says what the
+ *  current stop means; the track is just positions.
+ *
+ *  Last stop is `null` — no filter at all — because that's the default
+ *  and a slider needs its rest position at one end. */
+const EXPIRY_STOPS: { days: number | null; label: string }[] = [
   { days: 0, label: "Today" },
   { days: 1, label: "Tomorrow" },
-  { days: 7, label: "Within a week" },
+  { days: 2, label: "2 days" },
+  { days: 3, label: "3 days" },
+  { days: 7, label: "1 week" },
+  { days: 14, label: "2 weeks" },
+  { days: null, label: "Any time" },
 ];
+
+const LAST_STOP = EXPIRY_STOPS.length - 1;
+
+/** Where the LATER thumb sits, given the window's far end. A
+ *  hand-edited `?exp=` can carry a number that isn't one of the stops
+ *  (5, say) and the thumb still has to land somewhere: snap outward, so
+ *  the readout never names a window tighter than what's filtered. */
+function laterStopIndex(days: number | null): number {
+  if (days === null) return LAST_STOP;
+  const exact = EXPIRY_STOPS.findIndex((s) => s.days === days);
+  if (exact !== -1) return exact;
+  const wider = EXPIRY_STOPS.findIndex((s) => s.days !== null && s.days > days);
+  return wider === -1 ? LAST_STOP - 1 : wider;
+}
+
+/** Where the EARLIER thumb sits. Same snap-outward rule mirrored: an
+ *  off-stop `?expa=` lands on the widest stop at or below it. Null is
+ *  index 0 — no lower bound at all. */
+function earlierStopIndex(after: number | null): number {
+  if (after === null) return 0;
+  let index = 0;
+  EXPIRY_STOPS.forEach((s, i) => {
+    if (s.days !== null && s.days <= after) index = i;
+  });
+  return index;
+}
 
 /** Separate cards, stacked with a gap.
  *
@@ -161,12 +202,19 @@ function CheckboxRow({
   children,
   count,
   first = false,
+  logo,
+  reserveLogo = false,
 }: {
   checked: boolean;
   onClick: () => void;
   children: ReactNode;
   count?: number;
   first?: boolean;
+  /** Brand mark, when we have one for this merchant. */
+  logo?: string;
+  /** Hold the slot even when this row has no logo, so a rail where only
+   *  some stores resolved doesn't come out with a ragged name column. */
+  reserveLogo?: boolean;
 }) {
   return (
     <button
@@ -179,11 +227,19 @@ function CheckboxRow({
       <span
         aria-hidden
         className={`shrink-0 w-4 h-4 rounded-[5px] border flex items-center justify-center ${
-          checked ? "bg-accent border-accent text-white" : "border-line-strong"
+          checked ? "bg-accent-dark border-accent-dark text-white" : "border-line-strong"
         }`}
       >
         {checked && <Check />}
       </span>
+      {(logo || reserveLogo) &&
+        (logo ? (
+          // Decorative: the store's name is right beside it in text.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logo} alt="" aria-hidden className="shrink-0 w-[26px] h-[18px] object-contain object-left" />
+        ) : (
+          <span aria-hidden className="shrink-0 w-[26px] h-[18px]" />
+        ))}
       <span className="truncate flex-1">{children}</span>
       {count !== undefined && <span className={ROW_COUNT}>{count}</span>}
     </button>
@@ -194,8 +250,11 @@ function CheckboxRow({
  * column as CheckboxRow so it reads as part of the same list, but it's
  * a radio, not a checkbox: "all" isn't one more thing you can tick
  * alongside three stores, it's the state of having ticked nothing.
- * Hence the dot rather than a ✓, and a stronger rule under it
- * separating it from the options it summarises. */
+ * Hence the dot rather than a ✓, and a stronger rule under it — set off
+ * by a gap on both sides — separating it from the options it
+ * summarises. The gap is the point: with the rule alone the row read as
+ * simply the first store in the list, when what it is is the choice
+ * between "all of them" and "these specific ones". */
 function AllRow({
   checked,
   onClick,
@@ -208,11 +267,15 @@ function AllRow({
   count?: number;
 }) {
   return (
-    /* The rule lives on a wrapper, not as a border-b on the button —
-       the button's own background (bg-accent-soft when selected) would
+    /* The rules live on a wrapper, not as borders on the button — the
+       button's own background (bg-accent-soft when selected) would
        otherwise paint right up to a border whose colour has to read
-       against the NEXT row, not this one. */
-    <div className="border-b border-line-strong">
+       against the NEIGHBOURING row, not this one.
+       Ruled on BOTH edges: the one below separates the summary row from
+       the stores it sums up, and the one above separates it from the
+       section heading, which otherwise sat directly on top of a row
+       that looks like part of the header rather than the list. */
+    <div className="mb-2 border-y border-line-strong py-2">
       <button
         onClick={onClick}
         aria-pressed={checked}
@@ -254,7 +317,7 @@ function OptionPill({
       aria-pressed={active}
       className={`rounded-pill px-2.5 py-1 text-[12px] font-medium border transition-colors ${
         active
-          ? "bg-accent border-accent text-white"
+          ? "bg-accent-dark border-accent-dark text-white"
           : "bg-surface border-line text-ink-soft hover:border-line-strong hover:text-ink"
       }`}
     >
@@ -301,12 +364,109 @@ export function Segmented<T extends string>({
              labels like "Grocery stores" wrapped without it. The parent
              row wraps instead when there genuinely isn't space. */
           className={`flex-1 whitespace-nowrap rounded-[7px] px-2 py-1.5 text-[12px] font-semibold transition-colors ${
-            value === o.id ? "bg-accent text-white shadow-soft" : "text-ink-soft hover:text-ink"
+            value === o.id ? "bg-accent-dark text-white shadow-soft" : "text-ink-soft hover:text-ink"
           }`}
         >
           {o.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+/** "Deal ends" — a two-node slider over EXPIRY_STOPS, where the row of
+ *  pills used to be. Pills couldn't offer more windows without becoming
+ *  a wrapping block of buttons, and they could only ever say "ending
+ *  within X": the choice is really a BAND on one ordered axis, and a
+ *  band wants two handles. Drag either end — the left one sets the
+ *  earliest a deal may end, the right one the latest.
+ *
+ *  Stops are discrete (step=1 over indices, not days) so a thumb always
+ *  lands on a window with a name. The track is evenly spaced but the
+ *  days behind it aren't: the first few days matter one at a time, and
+ *  past that a week is the smallest unit anyone shops by, so a linear
+ *  0–14 track would spend most of its length on windows nobody picks.
+ *
+ *  Both ends open (left at "Today", right at "Any time") means no
+ *  filter at all — that's the rest position, and both setters get null.
+ *
+ *  Each input is pointer-transparent except its thumb (see .range-dual),
+ *  so grabbing one never depends on which is stacked on top. The one
+ *  case they can't be told apart is when both sit on the same stop; the
+ *  later thumb wins there, and since the earlier one is capped one stop
+ *  short of the end it can always be dragged back out. */
+function ExpirySlider({
+  after,
+  setAfter,
+  days,
+  setDays,
+}: {
+  after: number | null;
+  setAfter: (d: number | null) => void;
+  days: number | null;
+  setDays: (d: number | null) => void;
+}) {
+  const lo = earlierStopIndex(after);
+  const hi = laterStopIndex(days);
+
+  // Neither thumb may cross the other. The earlier one also stops one
+  // stop short of "Any time", which is a far-end marker, not a day —
+  // "ends no sooner than any time" isn't a window.
+  const moveEarlier = (i: number) => {
+    const next = Math.min(i, hi, LAST_STOP - 1);
+    setAfter(next === 0 ? null : EXPIRY_STOPS[next].days);
+  };
+  const moveLater = (i: number) => setDays(EXPIRY_STOPS[Math.max(i, lo)].days);
+
+  const readout =
+    lo === 0 && hi === LAST_STOP
+      ? "Any time"
+      : lo === hi
+        ? EXPIRY_STOPS[lo].label
+        : `${EXPIRY_STOPS[lo].label} – ${EXPIRY_STOPS[hi].label}`;
+
+  return (
+    <div>
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <span className={GROUP_LABEL}>Deal ends</span>
+        <span className="text-[12px] font-semibold text-ink">{readout}</span>
+      </div>
+      <div
+        className="range-dual"
+        style={
+          {
+            "--from": `${(lo / LAST_STOP) * 100}%`,
+            "--to": `${100 - (hi / LAST_STOP) * 100}%`,
+          } as CSSProperties
+        }
+      >
+        <div className="range-dual-track" />
+        <div className="range-dual-fill" />
+        <input
+          type="range"
+          min={0}
+          max={LAST_STOP}
+          step={1}
+          value={lo}
+          onChange={(e) => moveEarlier(Number(e.target.value))}
+          aria-label="Deal ends no sooner than"
+          /* Without this a screen reader reads the raw index ("4 of 6"),
+             which means nothing — the stops aren't days. */
+          aria-valuetext={EXPIRY_STOPS[lo].label}
+          className="range-filter"
+        />
+        <input
+          type="range"
+          min={0}
+          max={LAST_STOP}
+          step={1}
+          value={hi}
+          onChange={(e) => moveLater(Number(e.target.value))}
+          aria-label="Deal ends no later than"
+          aria-valuetext={EXPIRY_STOPS[hi].label}
+          className="range-filter"
+        />
+      </div>
     </div>
   );
 }
@@ -324,6 +484,51 @@ const SORT_DIRS: { id: SortDir; label: string }[] = [
   { id: "desc", label: "Priciest first" },
 ];
 
+/* Store logos. The rail lists stores by name only, which makes a column
+   of twelve near-identical rows to read word by word; a brand mark is the
+   thing people actually recognise. /settings already shows these (see its
+   store picker) — they come live from Flipp via /merchants/available, so
+   there is nothing to migrate, just a lookup by merchant id.
+
+   Cached per postal code at module scope: the rail remounts on every
+   client-side navigation back to /deals and the logos don't change
+   between those. A failure is silent and the rail renders exactly as it
+   did before — a decoration must never cost anyone their filters. */
+const LOGO_CACHE = new Map<string, Map<number, string>>();
+
+function useMerchantLogos(): Map<number, string> {
+  const { user, meta } = useAccount();
+  const postal = user?.postal_code ?? meta?.default_postal_code ?? null;
+  const [logos, setLogos] = useState<Map<number, string>>(
+    () => (postal && LOGO_CACHE.get(postal)) || new Map(),
+  );
+
+  useEffect(() => {
+    if (!postal) return;
+    const cached = LOGO_CACHE.get(postal);
+    if (cached) {
+      setLogos(cached);
+      return;
+    }
+    let live = true;
+    fetchAvailableMerchants(postal)
+      .then((ms) => {
+        const map = new Map<number, string>();
+        for (const m of ms) if (m.logo) map.set(m.id, m.logo);
+        LOGO_CACHE.set(postal, map);
+        if (live) setLogos(map);
+      })
+      .catch(() => {
+        /* no logos, no problem — the rows keep working */
+      });
+    return () => {
+      live = false;
+    };
+  }, [postal]);
+
+  return logos;
+}
+
 function toggle<T>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 }
@@ -334,6 +539,7 @@ export default function DealsSidebar({
   selectedMerchantIds,
   setSelectedMerchantIds,
   merchantCounts,
+  countsKnown,
   sort,
   setSort,
   sortDir,
@@ -344,6 +550,8 @@ export default function DealsSidebar({
   setStatus,
   expDays,
   setExpDays,
+  expAfter,
+  setExpAfter,
   priceMin,
   setPriceMin,
   priceMax,
@@ -356,6 +564,11 @@ export default function DealsSidebar({
   selectedMerchantIds: number[];
   setSelectedMerchantIds: (fn: (prev: number[]) => number[]) => void;
   merchantCounts: Map<number, number>;
+  /** Whether a facets response has landed for the current scope. A store
+   *  with nothing on sale is simply absent from `merchantCounts`, so
+   *  without this "we haven't asked yet" and "nothing here" both render
+   *  as a blank — and a blank reads as still loading. */
+  countsKnown: boolean;
   sort: SortMode;
   setSort: (s: SortMode) => void;
   sortDir: SortDir;
@@ -366,6 +579,8 @@ export default function DealsSidebar({
   setStatus: (s: DealStatus) => void;
   expDays: number | null;
   setExpDays: (d: number | null) => void;
+  expAfter: number | null;
+  setExpAfter: (d: number | null) => void;
   priceMin: string;
   setPriceMin: (v: string) => void;
   priceMax: string;
@@ -376,8 +591,12 @@ export default function DealsSidebar({
   // The number beside the SECTION TITLE counts the options themselves
   // (how many stores there are to pick from); the number on the "All"
   // row inside counts the ITEMS those options add up to, the same kind
-  // of number every individual row shows.
+  // of number every individual row shows. `merchantCounts` is fetched
+  // WITHOUT the store selection applied (see the facets effect in
+  // /deals), so this stays the true total across every store even while
+  // one store is ticked.
   const storeItems = [...merchantCounts.values()].reduce((a, b) => a + b, 0);
+  const merchantLogos = useMerchantLogos();
   const hasOwnStores = !!user && user.merchants.length > 0;
 
   return (
@@ -399,18 +618,12 @@ export default function DealsSidebar({
         </div>
 
         <div className="mb-4 last:mb-0">
-          <div className={`${GROUP_LABEL} mb-2`}>Deal ends</div>
-          <div className="flex flex-wrap gap-1.5">
-            {EXPIRY_OPTIONS.map((o) => (
-              <OptionPill
-                key={String(o.days)}
-                active={expDays === o.days}
-                onClick={() => setExpDays(o.days)}
-              >
-                {o.label}
-              </OptionPill>
-            ))}
-          </div>
+          <ExpirySlider
+            after={expAfter}
+            setAfter={setExpAfter}
+            days={expDays}
+            setDays={setExpDays}
+          />
         </div>
 
         <div className="mb-4 last:mb-0">
@@ -507,7 +720,7 @@ export default function DealsSidebar({
             <AllRow
               checked={selectedMerchantIds.length === 0}
               onClick={() => setSelectedMerchantIds(() => [])}
-              count={storeItems || undefined}
+              count={countsKnown ? storeItems : undefined}
             >
               All stores
             </AllRow>
@@ -517,7 +730,12 @@ export default function DealsSidebar({
                 first={i === 0}
                 checked={selectedMerchantIds.includes(m.id)}
                 onClick={() => setSelectedMerchantIds((prev) => toggle(prev, m.id))}
-                count={merchantCounts.get(m.id)}
+                // 0, not blank, once we know: "nothing on sale at
+                // FreshCo this week" is an answer, and the row that shows
+                // no number at all looks like it's still fetching one.
+                count={merchantCounts.get(m.id) ?? (countsKnown ? 0 : undefined)}
+                logo={merchantLogos.get(m.id)}
+                reserveLogo={merchantLogos.size > 0}
               >
                 {m.name}
               </CheckboxRow>

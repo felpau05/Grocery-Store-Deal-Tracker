@@ -100,21 +100,29 @@
      judged against, so darkening the base token can't compensate; drop
      the suffix instead. */
   --color-ink-soft:   #5c6a5f; /* secondary text — 6.6:1 on white */
-  /* Third tier: captions, counts, "3 of 94" — never body copy. 4.6:1
-     on white, so it still clears AA for normal text, but it's meant
-     for the stuff you skim past. */
-  --color-ink-muted:  #8a978c;
+  /* Third tier: captions, counts, "3 of 94" — never body copy. 4.91:1
+     on white: it clears AA for normal text with a little headroom, but
+     it's meant for the stuff you skim past. The old #8a978c claimed 4.6
+     in this comment and actually measured 3.05, which made the unit
+     price — the whole premise of the app — the least legible text on
+     the card. Against --color-accent-soft this only reaches 4.36, so on
+     a tinted row use --color-ink-soft (5.06 there), not this. */
+  --color-ink-muted:  #647565;
   --color-border-tan: #e3ebe1;
   /* THE accent. One green does price, CTA and active state — that
      single-accent discipline is most of what separates "soft modern
-     retail" from the old five-colour flyer. 5.0:1 against white text. */
+     retail" from the old five-colour flyer. 4.07:1 against white — LARGE
+     text only (this comment used to claim 5.0:1, which is what let it
+     spread onto small-text buttons). Behind white body text use
+     --color-accent-dark (6.61:1) and keep this as the border, which is
+     what makes the family read as one thing. */
   --color-sale: #2f8f4e;
   --color-sale-dark: #1f6a39;
   /* Selected filter pills / active states — extends the same green
      palette family one step darker than --color-sale (#4c874c), so
      they read as a genuinely different, more emphasized shade rather
      than duplicating the CTA button color. ~6.8:1 contrast with white
-     text, well past the CTA buttons' ~4.3:1. */
+     text, well past the CTA buttons' 4.07:1. */
   --color-produce: #396539;
   --color-tag:  	#73d073;
   /* Focus ring. Was carrot #e0762b — a second accent that existed only
@@ -266,10 +274,58 @@
   --color-line:        #e3ebe1;
   --color-line-strong: #cfdccc;
   --color-accent:      #2f8f4e;  /* == --color-sale, named honestly */
-  --color-accent-dark: #1f6a39;
+  --color-accent-dark: #1f6a39;  /* 6.61:1 — white body text sits on THIS */
+  --color-accent-deep: #1a5c31;  /* 8.02:1 — hover for the above, stays darker */
   --color-accent-soft: #e9f4ec;
   --color-danger:      #c4462f;
   --color-danger-soft: #fdeeea;
+
+  /* ── Category shelf colours ────────────────────────────────────────
+     The ONE sanctioned break from the single-accent rule, and only for
+     the glyph tiles in CategoryBrowser. A wall of 19 shelves all wearing
+     the same green swatch gives the eye nothing to aim at — you read
+     every label to find Produce. Hue does that job in one glance, and
+     it's the only place in the app where a dozen things of the same kind
+     sit side by side. Do NOT reach for these anywhere else: a coloured
+     price, button or badge is a different colour meaning a different
+     thing, which is exactly what the single accent exists to prevent.
+
+     Each hue is a pair — a dark glyph (~35% lightness, comfortably past
+     3:1 on its own tint) and a near-white fill in the same family, so a
+     tile still reads as a white card with a tinted chip on it rather
+     than as a block of colour. Shelves share a hue where their contents
+     do (bakery/breakfast are both wheat); the sharing pairs are never
+     neighbours in the shelf order. */
+  --color-cat-green:       #1f6a39;  /* produce */
+  --color-cat-green-soft:  #e8f4ec;
+  --color-cat-red:         #a8392c;  /* meat */
+  --color-cat-red-soft:    #fbece9;
+  --color-cat-ocean:       #1f5f95;  /* seafood */
+  --color-cat-ocean-soft:  #e8f0fa;
+  --color-cat-butter:      #8a6510;  /* dairy, eggs */
+  --color-cat-butter-soft: #fbf2db;
+  --color-cat-wheat:       #96601f;  /* bakery, breakfast */
+  --color-cat-wheat-soft:  #f9eede;
+  --color-cat-rose:        #a63a63;  /* deli */
+  --color-cat-rose-soft:   #fbe9f0;
+  --color-cat-ice:         #17697d;  /* frozen */
+  --color-cat-ice-soft:    #e3f2f5;
+  --color-cat-olive:       #5d6b22;  /* canned goods */
+  --color-cat-olive-soft:  #f0f3dd;
+  --color-cat-clay:        #9a5a33;  /* dry goods, pets */
+  --color-cat-clay-soft:   #f9ece6;
+  --color-cat-orange:      #ad5214;  /* snacks */
+  --color-cat-orange-soft: #fceee1;
+  --color-cat-teal:        #1c6b5b;  /* beverages, household */
+  --color-cat-teal-soft:   #e5f3f0;
+  --color-cat-indigo:      #3f4ba8;  /* international */
+  --color-cat-indigo-soft: #ecedfb;
+  --color-cat-plum:        #7a3a96;  /* alcohol, personal care */
+  --color-cat-plum-soft:   #f4eafa;
+  --color-cat-sky:         #2b7fb0;  /* babies */
+  --color-cat-sky-soft:    #e7f3fa;
+  --color-cat-slate:       #4f6272;  /* pantry, and the fallback */
+  --color-cat-slate-soft:  #eef1f4;
 
   /* Radii. Three steps, and that's the whole vocabulary:
        card    — cards, panels, modals, images
@@ -331,7 +387,8 @@
      every stop above. The type is 9px, so there's no headroom to give
      away: if you lighten the strip further, check the ink against the
      DARKEST stop, and if you darken it, flip this back to #ffffff. */
-  --color-slice-ink:     #ffffff;  /* "Slice me →" #3d2916*/
+  --color-slice-ink:     #3d2916;  /* "Slice me →" + the −/+ glyphs. 6.75:1
+                                      on the mid stop; white was 2.04. */
   --color-slice-outline: var(--color-ink);  /* border around the whole box */
   /* The panel the melon spins in, behind the iframe. Warm by design —
      it's the one place in the app that isn't green. */
@@ -827,6 +884,19 @@ body {
   font-weight: 600;
   font-size: 0.75rem;
 }
+/* Badge SIZING only, so it composes onto any of the three above or
+   onto its own colours — for a tag sitting ON a deal card's photo
+   rather than in a text flow. At full size, six cards in a row all
+   ending today read as six warning labels across the strip; this is
+   meant to be read once you're already looking at one card. */
+.badge-xs {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  font-family: var(--font-body);
+  font-size: 0.66rem;
+  line-height: 1.45;
+  letter-spacing: 0.005em;
+}
 
 /* Was a rotated, outlined rubber stamp. ~24 call sites use it, and
    they split into two jobs that the stamp conflated: empty-state
@@ -882,6 +952,135 @@ body {
   background-color: var(--color-line);
   height: 1px;
   opacity: 1;
+}
+
+/* Filter slider (the rail's "Deal ends" window). A native
+   <input type="range"> with the platform track and thumb replaced so it
+   wears the same hairline + white-field vocabulary as the price inputs
+   beside it. A native range has no element for the filled half, so the
+   fill is a hard-stop gradient on the track driven by --fill, which the
+   component sets inline from the current stop. */
+.range-filter {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  /* Tall enough to grab with a thumb; the visible track is the 4px
+     centred inside it. */
+  height: 20px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.range-filter::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--color-accent) var(--fill, 0%),
+    var(--color-line) var(--fill, 0%)
+  );
+}
+
+.range-filter::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--color-accent) var(--fill, 0%),
+    var(--color-line) var(--fill, 0%)
+  );
+}
+
+.range-filter::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  /* (16 - 4) / 2: centres the thumb on the track rather than hanging it
+     off the top edge, which is where WebKit puts it by default. */
+  margin-top: -6px;
+  border-radius: 999px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-line-strong);
+  box-shadow: var(--shadow-soft);
+  transition: border-color 120ms ease;
+}
+
+.range-filter::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-line-strong);
+  box-shadow: var(--shadow-soft);
+  transition: border-color 120ms ease;
+}
+
+.range-filter:hover::-webkit-slider-thumb {
+  border-color: var(--color-accent);
+}
+
+.range-filter:hover::-moz-range-thumb {
+  border-color: var(--color-accent);
+}
+
+/* Two-thumb version: two ranges stacked on the same 20px strip, over a
+   track and a filled band that are real elements underneath. A native
+   range only knows one value, so a band needs two of them — and the
+   inputs have to be pointer-transparent EXCEPT for their thumbs, or the
+   one on top would swallow every click meant for the one below. The
+   band's ends come from --from/--to, set inline by the component. */
+.range-dual {
+  position: relative;
+  height: 20px;
+}
+
+.range-dual > .range-filter {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  width: 100%;
+  pointer-events: none;
+}
+
+/* The shared track is drawn once, underneath; each input's own track
+   would otherwise paint over the band. */
+.range-dual > .range-filter::-webkit-slider-runnable-track {
+  background: transparent;
+}
+
+.range-dual > .range-filter::-moz-range-track {
+  background: transparent;
+}
+
+.range-dual > .range-filter::-webkit-slider-thumb {
+  pointer-events: auto;
+}
+
+.range-dual > .range-filter::-moz-range-thumb {
+  pointer-events: auto;
+}
+
+.range-dual-track,
+.range-dual-fill {
+  position: absolute;
+  /* (20 - 4) / 2 — the same centre line the thumbs sit on. */
+  top: 8px;
+  height: 4px;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.range-dual-track {
+  left: 0;
+  right: 0;
+  background-color: var(--color-line);
+}
+
+.range-dual-fill {
+  left: var(--from, 0%);
+  right: var(--to, 0%);
+  background-color: var(--color-accent);
 }
 
 /* Visible keyboard focus, kept consistent across interactive elements.

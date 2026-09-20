@@ -208,6 +208,8 @@ def _assemble_plan(plan_row: dict, item_rows: list[dict]) -> dict:
                 "name": item["name"],
                 "price": float(item["price"]),
                 "product_image": item["product_image"],
+                "size": float(item["size"]) if item["size"] is not None else None,
+                "size_unit": item["size_unit"],
             }
         )
         store["subtotal"] = round(store["subtotal"] + float(item["price"]), 2)

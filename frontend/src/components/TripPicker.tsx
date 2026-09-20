@@ -2,6 +2,7 @@
 
 import { useRef, useState, type RefObject } from "react";
 import { BTN_CART_ADD } from "@/lib/button";
+import { CHIP_QUIET_LIGHT, CHIP_SOFT } from "@/lib/chip";
 import { useDialogFocus } from "@/lib/hooks";
 import { tripName, useTrips } from "@/lib/trips";
 
@@ -96,11 +97,14 @@ function PickerDialog({ panelRef }: { panelRef: RefObject<HTMLDivElement | null>
               </button>
             </form>
           ) : (
+            /* The same chip the cart drawer's footer wears — this is
+               the same choice in a different frame, and it used to be
+               bare green text in one and a button in the other. */
             <button
               onClick={() => setNaming(true)}
-              className="text-sm font-semibold text-accent hover:text-accent-dark transition-colors"
+              className={`${CHIP_SOFT} w-full ${CHIP_QUIET_LIGHT}`}
             >
-              + New shopping trip
+              <span aria-hidden>+</span> New shopping trip
             </button>
           )}
         </div>

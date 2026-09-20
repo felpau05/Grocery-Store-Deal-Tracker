@@ -123,11 +123,11 @@ export default function MelonCorner() {
   // document what's underneath retracts it only where it would really
   // be in the way.
   //
-  // elementsFromPoint (plural) rather than elementFromPoint: this widget
-  // is `fixed` and painted on top, so the singular version would just
-  // report the melon back. Skipping everything inside our own subtree
-  // and taking the next hit is what's actually underneath it — and it
-  // works the same whether we're currently expanded or retracted.
+  // Bounds-based rather than hit-testing: this widget is `fixed` and
+  // painted on top, so anything point-based has to be told to ignore its
+  // own subtree, and sampling a few points misses controls that sit
+  // between them. Measuring candidate rects against the corner's box is
+  // exact, and works the same whether we're expanded or retracted.
   useEffect(() => {
     // Nothing to yield for below `md:` — the widget doesn't render there
     // at all (see the className), so hit-testing the corner on every
@@ -142,23 +142,28 @@ export default function MelonCorner() {
       const bottom = window.innerHeight - BOX_EDGE;
       const left = right - BOX_W;
       const top = bottom - BOX_H;
-      // Corners inset a little, plus the centre — five samples is enough
-      // to catch a card edge clipping the box without turning a scroll
-      // handler into a hit-test loop.
-      const points: [number, number][] = [
-        [left + 6, top + 6],
-        [right - 6, top + 6],
-        [left + 6, bottom - 6],
-        [right - 6, bottom - 6],
-        [(left + right) / 2, (top + bottom) / 2],
-      ];
-      const hit = points.some(([x, y]) =>
-        document
-          .elementsFromPoint(x, y)
-          .some(
-            (el) =>
-              !el.closest("[data-melon-corner]") && !!el.closest(CONTENT_SELECTOR),
-          ),
+      // Rectangle intersection against every candidate, not a handful of
+      // sample points. Five samples (the four inset corners and the
+      // centre) leave gaps tall enough for a whole control to fall
+      // through: at 1440x900 the "Save my stores" button on /settings sat
+      // in the band BETWEEN the centre sample and the bottom two, so the
+      // toy never yielded and the button could not be clicked at all.
+      // .some() still short-circuits on the first hit, and a single pass
+      // over a few dozen rects is cheaper than five elementsFromPoint
+      // calls anyway.
+      const hit = Array.from(document.querySelectorAll(CONTENT_SELECTOR)).some(
+        (el) => {
+          if (el.closest("[data-melon-corner]")) return false;
+          const r = el.getBoundingClientRect();
+          return (
+            r.width > 0 &&
+            r.height > 0 &&
+            r.left < right &&
+            r.right > left &&
+            r.top < bottom &&
+            r.bottom > top
+          );
+        },
       );
       setCovering(hit);
     };
@@ -191,9 +196,19 @@ export default function MelonCorner() {
     const settle = setTimeout(check, 1200);
     window.addEventListener("scroll", schedule, { passive: true });
     window.addEventListener("resize", schedule, { passive: true });
+    // Content that arrives from a fetch fires neither scroll nor resize,
+    // so the settle timer above was the only thing that could ever catch
+    // it — and anything slower than 1200ms (the /settings store grid, for
+    // one) was never re-measured at all. Watch the document itself.
+    const mutations = new MutationObserver(schedule);
+    mutations.observe(document.body, { childList: true, subtree: true });
+    const resizes = new ResizeObserver(schedule);
+    resizes.observe(document.body);
     return () => {
       clearTimeout(trailing);
       clearTimeout(settle);
+      mutations.disconnect();
+      resizes.disconnect();
       window.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);
     };

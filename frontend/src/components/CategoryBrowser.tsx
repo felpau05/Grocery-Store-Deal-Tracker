@@ -1,6 +1,7 @@
 "use client";
 
 import GlassCard from "@/components/GlassCard";
+import { CategoryIcon, IconCart, categoryTint } from "@/components/icons";
 
 /* Categories arrive from the API as lowercase slugs with spaces —
    "meat seafood", "dry goods pasta", "breakfast and cereal". The raw
@@ -19,35 +20,6 @@ export function categoryLabel(raw: string): string {
     .join(" ");
 }
 
-/* One glyph per category, purely so a wall of 19 tiles has something to
-   scan by other than text. Deliberately emoji rather than an icon set:
-   there is no icon dependency in this app and adding one for a browse
-   grid isn't worth 40KB. Unknown categories fall back to a tag. */
-const CATEGORY_EMOJI: Record<string, string> = {
-  alcohol: "🍷",
-  babies: "🍼",
-  bakery: "🥖",
-  beverages: "🥤",
-  breakfast: "🥣",
-  "breakfast and cereal": "🥣",
-  "canned goods": "🥫",
-  dairy: "🧀",
-  "dairy eggs": "🥚",
-  deli: "🥓",
-  "dry goods pasta": "🍝",
-  frozen: "🧊",
-  household: "🧽",
-  international: "🌍",
-  meat: "🥩",
-  "meat seafood": "🥩",
-  other: "🛒",
-  pantry: "🧂",
-  "personal care": "🧴",
-  pets: "🐾",
-  produce: "🥬",
-  seafood: "🐟",
-  snacks: "🍿",
-};
 
 /* Shelf order for the tiles. Sorting by item count (the first version)
    put Personal Care and Household — the two biggest buckets in every
@@ -143,9 +115,20 @@ export default function CategoryBrowser({
   return (
     // The whole section is the scroll area on sidebar layouts — there is
     // no heading to pin any more, so nothing sits above the tiles.
+    //
+    // The padding/negative-margin pairs on three sides are NOT spacing:
+    // they're clearance for things that paint OUTSIDE a tile's box. A
+    // scroll container clips at its padding box, and with no padding the
+    // top row's `shadow-soft` was sliced off flat along the container's
+    // edge — row one looked like it had a hard top edge while every row
+    // under it had a soft shadow — and `interactive`'s 2px hover lift
+    // took the top of a hovered tile with it. The negative margin gives
+    // that clearance back without moving the grid, so the tiles still
+    // line up with the search bar above them. `pr` is the one side that
+    // was already here, for the scrollbar.
     <section
       aria-label="Browse by category"
-      className="sidebar:flex-1 sidebar:min-h-0 sidebar:overflow-y-auto sidebar:pb-16 sidebar:pr-1"
+      className="sidebar:flex-1 sidebar:min-h-0 sidebar:overflow-y-auto sidebar:pb-16 sidebar:-mt-3 sidebar:pt-3 sidebar:-ml-3 sidebar:pl-3 sidebar:-mr-3 sidebar:pr-3"
     >
       {loading && tiles.length === 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-4">
@@ -169,8 +152,14 @@ export default function CategoryBrowser({
               onClick={onSeeEverything}
               surfaceClassName="relative overflow-hidden rounded-card bg-accent-soft border border-accent/30 w-full h-full px-4 py-5 text-left hover:border-accent transition-colors"
             >
-              <span aria-hidden className="block text-[26px] leading-none">
-                🛍️
+              {/* Same chip as every shelf below, in the accent — now
+                  that the shelves wear their own hues, a bare icon here
+                  read as an unstyled tile rather than the odd one out. */}
+              <span
+                aria-hidden
+                className="flex h-10 w-10 items-center justify-center rounded-control bg-accent/15 text-accent-dark"
+              >
+                <IconCart size={22} />
               </span>
               <span className="block mt-3 text-[15px] font-semibold text-ink">All</span>
               <span className="block mt-1 text-[13px] text-ink-muted">
@@ -193,8 +182,14 @@ export default function CategoryBrowser({
                 onClick={() => onSelect(name)}
                 surfaceClassName="relative overflow-hidden rounded-card bg-surface border border-line w-full h-full px-4 py-5 text-left hover:border-line-strong transition-colors"
               >
-                <span aria-hidden className="block text-[26px] leading-none">
-                  {CATEGORY_EMOJI[name] ?? "🏷️"}
+                {/* The shelf's own colour, not the accent — see
+                    `categoryTint`. The chip stays a small tinted square
+                    on a white card; the tile itself never takes the hue. */}
+                <span
+                  aria-hidden
+                  className={`flex h-10 w-10 items-center justify-center rounded-control ${categoryTint(name)}`}
+                >
+                  <CategoryIcon name={name} size={22} />
                 </span>
                 <span className="block mt-3 text-[15px] font-semibold text-ink">
                   {categoryLabel(name)}

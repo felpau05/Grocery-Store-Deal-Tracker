@@ -26,12 +26,13 @@ function InteractiveSidebar({ signedIn = false }: { signedIn?: boolean }) {
   const [priceUnits, setPriceUnits] = useState<PriceUnit[]>([]);
   const [status, setStatus] = useState<DealStatus>("all");
   const [expDays, setExpDays] = useState<number | null>(null);
+  const [expAfter, setExpAfter] = useState<number | null>(null);
   const [priceMin, setPriceMin] = useState("");
   const [priceMax, setPriceMax] = useState("");
 
   const advancedCount =
     (status !== "all" ? 1 : 0) +
-    (expDays !== null ? 1 : 0) +
+    (expDays !== null || expAfter !== null ? 1 : 0) +
     (priceMin !== "" ? 1 : 0) +
     (priceMax !== "" ? 1 : 0) +
     (priceUnits.length > 0 ? 1 : 0);
@@ -49,6 +50,7 @@ function InteractiveSidebar({ signedIn = false }: { signedIn?: boolean }) {
         selectedMerchantIds={selectedMerchantIds}
         setSelectedMerchantIds={setSelectedMerchantIds}
         merchantCounts={MERCHANT_COUNTS}
+        countsKnown
         sort={sort}
         setSort={setSort}
         sortDir={sortDir}
@@ -59,6 +61,8 @@ function InteractiveSidebar({ signedIn = false }: { signedIn?: boolean }) {
         setStatus={setStatus}
         expDays={expDays}
         setExpDays={setExpDays}
+        expAfter={expAfter}
+        setExpAfter={setExpAfter}
         priceMin={priceMin}
         setPriceMin={setPriceMin}
         priceMax={priceMax}
@@ -67,6 +71,7 @@ function InteractiveSidebar({ signedIn = false }: { signedIn?: boolean }) {
         onClearAdvanced={() => {
           setStatus("all");
           setExpDays(null);
+          setExpAfter(null);
           setPriceUnits([]);
           setPriceMin("");
           setPriceMax("");
