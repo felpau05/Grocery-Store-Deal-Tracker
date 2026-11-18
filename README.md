@@ -114,6 +114,10 @@ The backend talks to Postgres directly via `psycopg2` (raw SQL, no ORM) and to `
 - It scales to multiple replicas exactly like the backend (see the diagram above). Its Redis lock (`job.go`) is a distributed `SETNX` lock specifically so that's safe: any replica can take the trigger request, but only one ever wins the lock and actually scrapes — the rest get a 409 instead of racing it. More replicas buy redundancy for the trigger endpoint, not scrape throughput.
 - ML classification deliberately stays in Python — there's no practical scikit-learn/fastText equivalent in Go — so `scraper-go` writes items with `category`/`subcategory` left `NULL`, and an async APScheduler job in the backend sweeps `items WHERE category IS NULL` on a timer. The split is by runtime capability, and the decoupled backfill makes it resilient to whichever service wrote the row.
 
+**Scheduled flyer refresh.**
+
+Flyers change weekly, so the backend re-scrapes on a timer (`backend/maintenance/refresh.py`, an APScheduler job like the backfill and the prune). Every `SCRAPE_REFRESH_INTERVAL_HOURS` (default 24, `0` turns it off), and once about a minute after startup, it scrapes the default region plus every user's saved postal code, with each region's stores merged. `scraper-go` runs one scrape at a time, so the regions run one after another, each waited on for up to 30 minutes (the lock's TTL). A region that scraped successfully within the last half interval is skipped, and a refused start is retried on the next run.
+
 **Region-scoped deduplication.**
 
 - Items were originally deduped per raw postal code, but Flipp serves one flyer to many nearby postal codes.

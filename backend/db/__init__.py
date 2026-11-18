@@ -39,6 +39,7 @@ from .users import (
     get_user_by_email,
     get_user_by_google_sub,
     link_google_sub,
+    saved_scrape_regions,
     update_user,
 )
 
@@ -63,6 +64,7 @@ __all__ = [
     "link_google_sub",
     "create_user",
     "update_user",
+    "saved_scrape_regions",
     "storage_status",
     "clear_storage_error",
     "ensure_cart_tables",

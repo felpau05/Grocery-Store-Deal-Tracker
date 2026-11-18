@@ -103,6 +103,11 @@ class Config:
     # number so the chart can never ask for history prune has deleted.
     HISTORY_WEEKS: int = int(os.getenv("HISTORY_WEEKS") or 12)
 
+    # ── Scheduled flyer refresh ──────────────────────────────────────
+    # How often maintenance/refresh.py re-scrapes every region (default
+    # region + users' saved ones). 0 disables it.
+    SCRAPE_REFRESH_INTERVAL_HOURS: int = int(os.getenv("SCRAPE_REFRESH_INTERVAL_HOURS") or 24)
+
     # ── Classification backfill ──────────────────────────────────────
     # How often classifier/backfill.py sweeps items.category IS NULL.
     CLASSIFIER_BACKFILL_INTERVAL_SECONDS: int = int(

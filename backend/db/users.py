@@ -100,6 +100,23 @@ def get_user_by_google_sub(google_sub: str) -> dict | None:
         return _attach_merchants(cur, user) if user else None
 
 
+def saved_scrape_regions() -> list[dict]:
+    """Every saved (postal_code, merchant_id) pair, for the scheduled
+    scrape in maintenance/refresh.py. Returns no account data (no ids,
+    names or emails), so it is not a list-all-users query. Users with no
+    stores drop out at the JOIN; blank postal codes are dropped by the
+    caller."""
+    with get_cursor() as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT u.postal_code, m.merchant_id
+            FROM app_users u
+            JOIN user_merchants m ON m.user_id = u.id
+            """
+        )
+        return cur.fetchall()
+
+
 @graceful_write
 def create_user(
     name: str,
