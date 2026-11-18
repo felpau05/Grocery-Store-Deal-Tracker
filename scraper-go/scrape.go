@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -30,6 +31,7 @@ func stringOrEmpty(v any) string {
 // batch-writes to Postgres. Returns the count of items persisted.
 func runScrape(ctx context.Context, pool *pgxpool.Pool, postalCode string, validMerchants map[int64]bool) (int, error) {
 	hc := newFlippHTTPClient(detailConcurrency)
+	scrapeStart := time.Now()
 
 	log.Printf("scrape %s: fetching merchants", postalCode)
 	allMerchants, err := fetchMerchants(ctx, hc, postalCode)
@@ -86,11 +88,18 @@ func runScrape(ctx context.Context, pool *pgxpool.Pool, postalCode string, valid
 	enriched := enrichItems(ctx, hc, allItems, postalCode, sid, detailConcurrency)
 
 	log.Printf("scrape %s: parsing + persisting %d items", postalCode, len(enriched))
+	loadStart := time.Now()
 	saved, failed, err := parseAndPersist(ctx, pool, enriched, merchants, postalCode)
 	if err != nil {
 		return saved, err
 	}
+	load := time.Since(loadStart)
 	log.Printf("scrape %s: done — %d saved, %d failed/dropped", postalCode, saved, failed)
+	// Timing for the parse + database load alone (no network), and for
+	// the whole scrape including the Flipp fetches.
+	log.Printf("scrape %s: timing — parse+load %s (%.0f rows/s), whole scrape %s",
+		postalCode, load.Round(time.Millisecond), float64(saved)/load.Seconds(),
+		time.Since(scrapeStart).Round(time.Millisecond))
 	return saved, nil
 }
 
